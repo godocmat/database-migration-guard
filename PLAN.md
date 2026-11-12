@@ -39,6 +39,11 @@ Initial positioning is a PostgreSQL pre-merge gate that fits existing migration 
 
 The preferred parser depends on native tooling. The initial build spike decides the support matrix for the CLI binaries and confirms which parser grammar the release can claim. Pin a compatible stable Rust toolchain after the spike.
 
+### Phase 0 research status
+
+- **DMG-01 parser research is complete.** Test `pg_query` 18.1.0 first with its bundled PostgreSQL 18.6 grammar. Use `pg_query` 6.2.1 with PostgreSQL 17.7 grammar as a reference in a separate executable, and retain `sqlparser` 0.64.0 as the alternate. The spike must verify grammar and normalized facts against PostgreSQL 17.12 and 18.7, original source spans and error locations, native builds and offline execution on the proposed platforms, and redistribution notices before accepting ADR 001. [Parser decision brief](docs/research/postgresql-parser.md)
+- **DMG-02 fixture and competitor research is complete.** Use the 28 proposed cases to build the development corpus. Independently label and freeze the holdout before rule tuning. Pin Squawk and Atlas versions and the Atlas edition before running the pilot, and score shared cases after verifying the same selected SQL and runner behavior. [Fixture matrix and pilot protocol](docs/research/fixtures-and-competitors.md)
+
 ## 4. Functional requirements
 
 | ID | Requirement |
@@ -57,7 +62,7 @@ The preferred parser depends on native tooling. The initial build spike decides 
 | Adapter | Planned behavior and support boundary |
 | --- | --- |
 | Plain SQL | Require an explicit version pattern and ordering. Model transaction behavior from a declared runner setting and explicit SQL boundaries. Use a trusted manifest or Git base for file integrity and an explicit applied manifest for pending detection. |
-| SQLx | Cover single-file versioned migrations and reversible SQL pairs in MVP. Keep down migrations outside the forward plan. Preserve runner-supported transaction directives. In v1 validate native history and checksum behavior against each pinned SQLx version. [SQLx migration source contract](https://docs.rs/sqlx/latest/sqlx/migrate/trait.MigrationSource.html), [SQLx v0.8.6 loader](https://raw.githubusercontent.com/launchbadge/sqlx/v0.8.6/sqlx-core/src/migrate/source.rs), [SQLx checksum source](https://docs.rs/crate/sqlx-core/latest/source/src/migrate/migration.rs) |
+| SQLx | Cover single-file versioned migrations and reversible SQL pairs in MVP, with v0.8.6 as the first parity target. Keep down migrations outside the forward plan. Model both the runner's transaction wrapper and the implicit transaction PostgreSQL can apply to a multi-statement query after the runner opts out of its wrapper. In v1 validate native history and checksum behavior against each supported SQLx version. [SQLx v0.8.6 loader](https://raw.githubusercontent.com/launchbadge/sqlx/v0.8.6/sqlx-core/src/migrate/source.rs), [SQLx v0.8.6 execution](https://github.com/transact-rs/sqlx/blob/v0.8.6/sqlx-postgres/src/migrate.rs#L190-L272), [PostgreSQL message flow](https://www.postgresql.org/docs/18/protocol-flow.html#PROTOCOL-FLOW-MULTI-STATEMENT) |
 | Flyway | Support versioned and repeatable SQL with their own ordering and history semantics. Model supported transaction settings. Recognize undo files separately. Diagnose unresolved placeholders, callbacks, and unsupported ordering or grouping settings. Validate native checksums against runner fixtures. [Versioned migrations](https://documentation.red-gate.com/fd/versioned-migrations-273973333.html), [repeatable migrations](https://documentation.red-gate.com/flyway/flyway-concepts/migrations/repeatable-migrations), [validation](https://documentation.red-gate.com/flyway/reference/commands/validate), [transaction setting](https://documentation.red-gate.com/flyway/reference/configuration/flyway-namespace/flyway-execute-in-transaction-setting) |
 | Goose | Honor Up and Down sections, grouped statement annotations, and transaction opt-outs. Flag environment substitution until there is a bounded way to provide trusted values. Use a Guard manifest for content integrity where the source history supplies only applied status. [Goose SQL annotations](https://pressly.github.io/goose/documentation/annotations/) |
 | Supabase | Discover timestamped SQL under `supabase/migrations`. Reconcile timestamp identities with authorized history. Use a Guard manifest or trusted Git ref for file integrity. Document extension and managed-schema requirements for simulation. Pin CLI versions for fixtures because CLI v3 changed remote target selection. [Database migrations](https://supabase.com/docs/guides/deployment/database-migrations), [CLI reference](https://supabase.com/docs/reference/cli/supabase-migration-list), [CLI v3 changelog](https://supabase.com/changelog/supabase-cli-v3) |
@@ -149,7 +154,7 @@ This is the target matrix. PostgreSQL 14 reached upstream end of life on 12 Nove
 | 18 | Static analysis target | Static, inspection, diff, and simulation target | PostgreSQL 18 constraint syntax and catalog behavior |
 | 19 and later | Watch list | Candidate after GA and validation | Require matching parser coverage, catalog fixtures, and sandbox image acceptance |
 
-For a concrete version test, PostgreSQL 18 introduced support for NOT VALID on not-null constraints and for NOT VALID foreign keys on partitioned tables. Check acceptance on 18 and report a version incompatibility on 17. The support matrix applies to the documented statement, object, and adapter subset. [PostgreSQL 18 release notes](https://www.postgresql.org/docs/18/release-18.html), [PostgreSQL 17 ALTER TABLE](https://www.postgresql.org/docs/17/sql-altertable.html)
+Use the PostgreSQL 18 named NOT NULL constraint with deferred validation to test version-specific syntax. A NOT VALID foreign key on a partitioned table also exercises version-specific execution because PostgreSQL 17 can parse the command and then reject it. Record parser acceptance and server execution separately on both majors. The support matrix applies to the documented statement, object, and adapter subset. [PostgreSQL 18 release notes](https://www.postgresql.org/docs/18/release-18.html), [PostgreSQL 17 execution check](https://github.com/postgres/postgres/blob/REL_17_12/src/backend/commands/tablecmds.c#L10275-L10290)
 
 ## 10. Risk classification and policy
 
@@ -236,6 +241,8 @@ For protected pre-deploy checks, compare the intended deployment's migration dig
 
 Review a holdout corpus independently of rule development. Require each release-scope destructive fixture to produce a corresponding finding or a blocking incomplete result. Track unsupported cases separately from findings and report false positives and missed risks with examples. Use targeted smoke jobs on PRs and the full server, security, and packaging matrix before release.
 
+Run the paired SQLx cases T02 and T04 with the native runner. Verify a concurrent index by itself and the predicted transaction conflict when it shares an opt-out migration with another statement. For the multi-statement case, record whether the preceding schema change rolls back. [Transaction fixtures](docs/research/fixtures-and-competitors.md#transaction-handling-and-source-spans)
+
 ## 15. Deployment and release strategy
 
 Build the CLI and container from pinned source, toolchain, dependencies, and base image digests. Proposed first native targets are Linux x86-64, Windows x86-64, and macOS arm64, with a Linux x86-64 CLI container. Confirm each through clean installs and the parser portability spike. Use Docker Compose for repeatable local integration fixtures where useful.
@@ -260,12 +267,12 @@ If centralized reporting is approved, plan an Axum API, PostgreSQL store, and An
 
 ## 17. Prioritized backlog
 
-All items are planned. Implement in dependency order and record test and review evidence against each item.
+The backlog tracks remaining acceptance work. Implement in dependency order and record test and review evidence against each item.
 
 | ID | Priority | Work item | Depends on | Acceptance check |
 | --- | --- | --- | --- | --- |
-| DMG-01 | MVP | Research PostgreSQL behavior and run parser and native build spikes | — | Record grammar and platform evidence and accept or revise the parser decision. |
-| DMG-02 | MVP | Collect representative migrations and define pilot comparisons | — | Review a labeled holdout corpus and document the comparison procedure. |
+| DMG-01 | MVP | Run the parser conformance and native build spike from the reviewed decision brief | — | Record grammar, source-span, and platform evidence and accept or revise ADR 001. |
+| DMG-02 | MVP | Build representative development fixtures and prepare an independent holdout | — | Freeze independently reviewed holdout labels and retain the documented pilot comparison procedure. |
 | DMG-03 | MVP | Establish workspace, domain types, errors, policy and report versions, and build CI | DMG-01 | Toolchain and schema compatibility contracts are documented and checked. |
 | DMG-04 | MVP | Implement plain SQL and SQLx discovery, ordering, manifests, and Git-base comparison | DMG-03 | Fixture repositories classify new, changed, deleted, duplicate, and ambiguous identities correctly. |
 | DMG-05 | MVP | Normalize PostgreSQL statements and preserve source spans and coverage | DMG-03, 04 | Supported SQL maps to original locations and unsupported syntax is visible. |
@@ -345,20 +352,15 @@ Review requirements, run relevant checks, fix failures, update documentation, an
 
 Use one fresh Codex chat in **Worktree** mode per assignment. Select the branch containing the accepted starting commit. Codex starts a managed worktree at that revision with a detached HEAD by default. Use **Create branch here** to give each task a durable branch before handoff, for example `codex/dmg-01-parser-research`. A built-in subagent reports to its parent chat. When using that form of delegation, explicitly assign a fresh worktree to each worker before it edits files. [Codex worktrees](https://learn.chatgpt.com/docs/environments/git-worktrees), [Codex subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)
 
-This repository has no commits yet. The first execution step is to commit the approved plan locally so every worker has the same starting instructions. The coordinating chat owns the integration branch and updates the backlog. Workers start from an accepted commit that includes their dependencies. A local commit is enough to establish that baseline.
+The coordinating chat owns the local `master` integration branch and updates the backlog. Start each worker from an accepted commit that contains its dependencies and the current plan.
 
 Give each assignment one reviewable outcome, its backlog ID, base revision, allowed files, interface assumptions, and acceptance checks. Split complex work where one part can be tested and merged before the next, such as simulator provisioning and migration execution. Bundle related small tasks such as an adapter's fixtures and documentation with the same owner. Start with two workers and add another when an independent assignment is ready.
 
-### First two assignments
+### Research handoff
 
-These two research assignments can run together from the initial plan commit.
+The two research assignments ran in separate worktrees from `91c4f3d`. Their reviewed briefs and remaining checks are listed in [Phase 0 research status](#phase-0-research-status).
 
-| Assignment | Scope and handoff |
-| --- | --- |
-| DMG-01 research | Write `docs/research/postgresql-parser.md`. Compare PostgreSQL parser candidates and evidence about the supported grammar, source locations, licenses, and build requirements. Identify PostgreSQL 17 and 18 conformance cases and state what the later build spike must verify. Use primary sources. This assignment produces a decision brief. |
-| DMG-02 fixture and competitor research | Write `docs/research/fixtures-and-competitors.md`. List representative plain SQL and SQLx cases with expected outcomes, propose how to select and review the holdout corpus, and describe how to run a fair Squawk and Atlas comparison. Label documented behavior and proposed checks. This assignment produces a fixture and pilot plan. |
-
-Review the parser brief before commissioning the parser and portability spike. Feed fixture cases into conformance tests as they land. The spike supplies measured evidence for the parser and platform decision. The foundation assignment then establishes the shared Cargo workspace and contracts.
+Start the DMG-01 parser and portability spike from the integrated revision. The DMG-02 corpus assignment can proceed in parallel and supply cases as they land. The foundation assignment follows the parser and platform decision.
 
 ### Break down implementation by dependency
 
