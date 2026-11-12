@@ -1,0 +1,1 @@
+ALTER TABLE app.accounts ALTER COLUMN email SET NOT NULL;
