@@ -3,6 +3,7 @@ members = [
     "crates/dmg-cli",
     "crates/dmg-core",
     "crates/dmg-discovery",
+    "crates/dmg-inspect",
     "crates/dmg-postgres",
     "crates/dmg-report",
     "crates/dmg-rules",
