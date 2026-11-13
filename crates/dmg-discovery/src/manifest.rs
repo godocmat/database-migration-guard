@@ -34,9 +34,14 @@ pub enum ManifestError {
     InvalidPath,
     #[error("manifest repeats a migration identity, direction, or path")]
     Duplicate,
+    #[error("reversible SQLx integrity manifest contains an unpaired migration")]
+    UnpairedMigration,
 }
 
-/// Compare a worktree discovery result to the original bytes recorded in a trusted manifest.
+/// Compare discovery against the original bytes recorded in a trusted manifest.
+///
+/// Coverage may still be incomplete after successful manifest validation. Check the resulting plan
+/// for integrity evidence and selection.
 pub fn compare_integrity_manifest(
     discovery: &mut Discovery,
     manifest: &[u8],
@@ -81,6 +86,25 @@ pub fn compare_integrity_manifest(
                 .is_some()
         {
             return Err(ManifestError::Duplicate);
+        }
+    }
+    if matches!(
+        options.adapter,
+        Adapter::Sqlx(crate::SqlxLayout::Reversible)
+    ) {
+        for ((identity, direction), file) in &baseline {
+            let other = match direction {
+                MigrationDirection::Forward => MigrationDirection::Down,
+                MigrationDirection::Down => MigrationDirection::Forward,
+            };
+            let Some(other_file) = baseline.get(&(identity.clone(), other)) else {
+                return Err(ManifestError::UnpairedMigration);
+            };
+            if *direction == MigrationDirection::Forward
+                && !crate::sqlx::matching_paths(&file.path, &other_file.path)
+            {
+                return Err(ManifestError::UnpairedMigration);
+            }
         }
     }
     if discovery.plan.coverage.gaps().is_empty() {

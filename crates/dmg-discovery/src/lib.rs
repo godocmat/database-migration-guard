@@ -348,7 +348,7 @@ impl Inventory {
                 });
             }
         }
-        sqlx::validate_pairs(&self.files, &mut self.gaps);
+        sqlx::validate_pairs(&options.adapter, &self.files, &mut self.gaps);
         let selected_forwards = self.gaps.is_empty().then(|| {
             self.files
                 .iter()

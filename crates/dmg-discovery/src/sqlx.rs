@@ -5,6 +5,8 @@ use dmg_core::{
     },
 };
 
+use dmg_core::source::RepoPath;
+
 use crate::Candidate;
 
 const NO_TRANSACTION: &[u8] = b"-- no-transaction";
@@ -56,22 +58,25 @@ pub(super) fn execution(bytes: &[u8]) -> ExecutionMode {
     }
 }
 
-pub(super) fn validate_pairs(files: &[MigrationFile], gaps: &mut Vec<CoverageGap>) {
+pub(super) fn validate_pairs(
+    layout: &crate::Adapter,
+    files: &[MigrationFile],
+    gaps: &mut Vec<CoverageGap>,
+) {
+    if !matches!(layout, crate::Adapter::Sqlx(SqlxLayout::Reversible)) {
+        return;
+    }
     for pair in files.chunk_by(|left, right| left.identity == right.identity) {
-        let first = &pair[0];
-        if first.identity.adapter != MigrationAdapter::Sqlx || !is_reversible(first) {
-            continue;
-        }
-        if pair.len() == 2
-            && pair[0].direction == MigrationDirection::Forward
-            && pair[1].direction == MigrationDirection::Down
-            && pair_name(&pair[0]) == pair_name(&pair[1])
+        if let [up, down] = pair
+            && up.direction == MigrationDirection::Forward
+            && down.direction == MigrationDirection::Down
+            && matching_paths(&up.path, &down.path)
         {
             continue;
         }
         gaps.push(CoverageGap {
             scope: DiagnosticScope::Migration {
-                identity: first.identity.clone(),
+                identity: pair[0].identity.clone(),
             },
             kind: CoverageGapKind::UnpairedMigration,
             message:
@@ -82,28 +87,12 @@ pub(super) fn validate_pairs(files: &[MigrationFile], gaps: &mut Vec<CoverageGap
     }
 }
 
-fn is_reversible(file: &MigrationFile) -> bool {
-    let (_, name) = file
-        .path
-        .as_str()
-        .rsplit_once('/')
-        .expect("migration resides below a root");
-    name.split_once('_')
-        .is_some_and(|(_, suffix)| suffix.ends_with(".up.sql") || suffix.ends_with(".down.sql"))
+pub(super) fn matching_paths(up: &RepoPath, down: &RepoPath) -> bool {
+    pair_name(up, ".up.sql").is_some_and(|name| Some(name) == pair_name(down, ".down.sql"))
 }
 
-fn pair_name(file: &MigrationFile) -> (&str, &str) {
-    let (root, filename) = file
-        .path
-        .as_str()
-        .rsplit_once('/')
-        .expect("migration resides below a root");
-    let (_, name) = filename
-        .split_once('_')
-        .expect("SQLx filename has a version prefix");
-    let stem = name
-        .strip_suffix(".up.sql")
-        .or_else(|| name.strip_suffix(".down.sql"))
-        .unwrap_or(name);
-    (root, stem)
+fn pair_name<'a>(path: &'a RepoPath, suffix: &str) -> Option<(&'a str, &'a str)> {
+    let (root, filename) = path.as_str().rsplit_once('/')?;
+    let (_, name) = filename.split_once('_')?;
+    Some((root, name.strip_suffix(suffix)?))
 }

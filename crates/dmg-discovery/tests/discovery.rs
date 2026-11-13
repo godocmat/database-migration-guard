@@ -453,3 +453,36 @@ fn applied_history_can_be_verified_when_only_the_git_base_is_missing() {
     assert_eq!(discovery.plan.coverage.status(), CoverageStatus::Incomplete);
     assert!(discovery.plan.integrity.is_none());
 }
+
+#[test]
+fn reversible_integrity_manifest_requires_matching_directions() {
+    let repo = TestRepo::new().unwrap();
+    let content = b"SELECT 1;";
+    repo.write("migrations/1_a.up.sql", content);
+    repo.write("migrations/1_a.down.sql", content);
+    let mut discovery = discover_worktree(&repo.0, &sqlx(dmg_discovery::SqlxLayout::Reversible));
+    let mut baseline = serde_json::json!({
+        "schema_version": 1,
+        "adapter": "sqlx",
+        "migrations": [
+            {"version": 1, "direction": "forward", "path": "migrations/1_a.up.sql", "sha256": ContentDigest::of(content)},
+        ],
+    });
+    let bytes = serde_json::to_vec(&baseline).unwrap();
+    assert!(matches!(
+        dmg_discovery::compare_integrity_manifest(
+            &mut discovery,
+            &bytes,
+            ContentDigest::of(&bytes)
+        ),
+        Err(dmg_discovery::ManifestError::UnpairedMigration)
+    ));
+    baseline["migrations"].as_array_mut().unwrap().push(serde_json::json!({
+        "version": 1, "direction": "down", "path": "migrations/1_a.down.sql", "sha256": ContentDigest::of(content),
+    }));
+    let bytes = serde_json::to_vec(&baseline).unwrap();
+    dmg_discovery::compare_integrity_manifest(&mut discovery, &bytes, ContentDigest::of(&bytes))
+        .unwrap();
+    assert_eq!(discovery.plan.integrity.unwrap().changes.len(), 2);
+    assert_eq!(discovery.plan.selected_forwards, Some(Vec::new()));
+}
