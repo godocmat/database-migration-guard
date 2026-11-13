@@ -2,6 +2,8 @@
 
 Install Git, rustup, and a native Rust linker for your host. On Windows x64, install the MSVC C++ build tools and Windows SDK. Use Xcode Command Line Tools on macOS and a C toolchain on Linux. Rustup reads the pinned channel and components from `rust-toolchain.toml`. [Rust toolchain overrides](https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file)
 
+## Native PostgreSQL parser
+
 The pinned PostgreSQL parser builds its bundled C source with a native compiler. Bindgen loads libclang from `LIBCLANG_PATH`. Point it to the directory holding a library for your host architecture. [Bindgen requirements](https://rust-lang.github.io/rust-bindgen/requirements.html)
 
 | Build host | Native prerequisites and libclang |
