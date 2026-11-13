@@ -123,5 +123,5 @@ Record the exact source revision, artifact SHA-256 or OCI digest, environment, a
 | Linux x86-64 package | Earlier pilot ran on Ubuntu 24.04. Verify the final native package and upgrade in a clean environment. |
 | macOS arm64 package | Native build, clean install and upgrade verification pending. |
 | Linux x86-64 CLI and GitLab images | Pinned recipes. Verify Docker builds and runtime checks and scan the exact OCI artifacts. |
-| Performance and accuracy | Initial measurements and frozen holdout scores are in the [progress record](../PROGRESS.md). Complete the release benchmarks and accuracy review on the final candidate. |
+| Performance and accuracy | The cross-built Linux `af21401` executable met the 2-vCPU, 8-GiB planning budgets. The native Windows `af21401` holdout matched 100 of 100 gate outcomes and 56 of 64 exact findings. Review the remaining discrepancies for release. [Benchmark evidence](../fixtures/dmg-15/README.md) · [Holdout and boundary results](../PROGRESS.md#dmg-15-frozen-holdout-rescore) |
 | Release integrity and licensing | Local hashes and provisional SBOMs. Approved licensing and notice review, signed provenance, and approval to publish remain pending. |
