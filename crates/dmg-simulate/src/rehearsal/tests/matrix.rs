@@ -87,6 +87,11 @@ impl Fixture {
 }
 
 fn added(report: &RehearsalReportV1, kind: ObjectKind, name: &str) -> bool {
+    let (identity_name, identity_member) = match kind {
+        ObjectKind::Column | ObjectKind::Constraint => ("items", Some(name)),
+        ObjectKind::Index => (name, None),
+        _ => panic!("unexpected fixture object kind: {kind:?}"),
+    };
     report
         .schema_diff
         .as_ref()
@@ -95,7 +100,12 @@ fn added(report: &RehearsalReportV1, kind: ObjectKind, name: &str) -> bool {
         .iter()
         .any(|change| {
             matches!(change, StructuralChange::Added { object }
-            if object.identity.kind == kind && object.identity.name == name)
+            if object.identity.kind == kind
+                && object.identity.schema.as_deref() == Some("public")
+                && object.identity.name == identity_name
+                && object.identity.member.as_deref() == identity_member
+                && object.owning_table.as_ref().is_some_and(|table|
+                    table.schema == "public" && table.name == "items"))
         })
 }
 
@@ -273,6 +283,7 @@ async fn isolated_rehearsal_matrix() {
         "{:?}",
         report.failure
     );
+    assert!(added(&report, ObjectKind::Constraint, "note_present"));
     let after = report.after.as_ref().unwrap();
     assert!(
         after
