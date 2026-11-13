@@ -109,11 +109,17 @@ cosign verify \
 skopeo copy --preserve-digests "docker://$wolfi_image" "oci:$WOLFI_BASE_LAYOUT:review"
 ~~~
 
-On the disconnected Linux build host, use the staged CLI context above with BuildKit and the saved OCI layout. For the GitLab context, use the [GitLab staging example](gitlab-ci.md#prepare-the-pinned-image), set `role=gitlab` and pass the same binary digest. [BuildKit local OCI layouts](https://github.com/moby/buildkit/blob/v0.34.1/docs/reference/buildctl.md#local-sources)
+On the disconnected Linux build host, use the staged CLI context above with BuildKit and the saved OCI layout. For GitLab, stage its context and set `role=gitlab`. Use the recipe and staging helper from the recorded `RECIPE_COMMIT` and the same BuildKit version, build inputs and exporter name across independent builds. Set `REVIEWED_COMMIT` to the executable's source revision. [GitLab context](gitlab-ci.md#prepare-the-pinned-image) · [BuildKit local OCI layouts](https://github.com/moby/buildkit/blob/v0.34.1/docs/reference/buildctl.md#local-sources) · [BuildKit timestamp controls](https://github.com/moby/buildkit/blob/v0.34.1/docs/build-repro.md#source_date_epoch)
 
 ~~~sh
 role=cli
 wolfi_image=$(awk '$1 == "FROM" {print $2}' "integrations/$role/Containerfile")
+epoch=$(git show -s --format=%ct "$RECIPE_COMMIT")
+image_name="dmg-$role:$(printf '%.7s' "$REVIEWED_COMMIT")"
+touch -d "@$epoch" "$context/dmg"
+if [ "$role" = gitlab ]; then
+  touch -d "@$epoch" "$context/integrations/gitlab/gate.py"
+fi
 buildctl build --frontend dockerfile.v0 \
   --local "context=$context" --local "dockerfile=integrations/$role" \
   --oci-layout "wolfi-base=$WOLFI_BASE_LAYOUT" \
@@ -121,8 +127,11 @@ buildctl build --frontend dockerfile.v0 \
   --opt filename=Containerfile --opt platform=linux/amd64 --opt force-network-mode=none \
   --opt "build-arg:DMG_BINARY_SHA256=$DMG_BINARY_SHA256" \
   --opt "build-arg:DMG_SOURCE_COMMIT=$REVIEWED_COMMIT" \
-  --output "type=oci,dest=dmg-$role.oci.tar"
+  --opt "build-arg:SOURCE_DATE_EPOCH=$epoch" \
+  --output "type=oci,name=$image_name,dest=dmg-$role.oci.tar,rewrite-timestamp=true"
 ~~~
+
+Compare the OCI manifest and archive SHA-256 from each independent build. The recipes retain the runtime loader cache and discard the regenerable `ldconfig` auxiliary cache during package installation. Its file identities include filesystem-specific inode and device numbers and change times. [glibc auxiliary cache implementation](https://github.com/gnutools/glibc/blob/48fa38b9218add3a1e5c38c349a3e481a5fcf245/elf/cache.c#L968-L987)
 
 ## Attest and verify approved artifacts
 
