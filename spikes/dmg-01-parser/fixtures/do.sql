@@ -1,0 +1,2 @@
+DO $body$ BEGIN EXECUTE 'SELECT 1;'; END; $body$;
+SELECT 2;
