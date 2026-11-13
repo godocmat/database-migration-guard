@@ -416,6 +416,7 @@ dependencies = [
  "dmg-postgres",
  "dmg-report",
  "dmg-rules",
+ "dmg-simulate",
  "serde",
  "serde_json",
  "tempfile",

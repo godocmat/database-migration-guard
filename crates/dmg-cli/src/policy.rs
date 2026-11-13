@@ -37,6 +37,10 @@ impl ValidatedPolicy {
         })
     }
 
+    pub(crate) fn digest(&self) -> ContentDigest {
+        self.digest
+    }
+
     pub(crate) fn evaluate(
         &self,
         plan: &MigrationPlan,

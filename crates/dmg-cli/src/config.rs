@@ -5,7 +5,7 @@ use std::{
     path::Path,
 };
 
-use dmg_core::{source::RepoPath, target::PostgresTarget};
+use dmg_core::{digest::ContentDigest, source::RepoPath, target::PostgresTarget};
 use dmg_discovery::{
     Adapter, DiscoveryLimits, DiscoveryOptions, FlywaySettings, PlainSql, PlainTransaction,
     SqlxLayout, VersionOrder,
@@ -98,6 +98,7 @@ impl ExitCodes {
 }
 
 pub(crate) struct Project {
+    pub(crate) digest: ContentDigest,
     pub(crate) target: PostgresTarget,
     pub(crate) discovery: DiscoveryOptions,
     pub(crate) rules: RuleOptions,
@@ -165,6 +166,7 @@ impl Project {
             AdapterFile::Supabase => Adapter::Supabase,
         };
         Ok(Self {
+            digest: ContentDigest::of(&bytes),
             target: file.target,
             discovery: DiscoveryOptions::new(file.roots, adapter, DiscoveryLimits::default())?,
             rules: RuleOptions {
