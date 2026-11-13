@@ -312,6 +312,8 @@ DMG-05 is integrated. The parser normalizes the supported PostgreSQL 17–18 ope
 
 DMG-06 rule implementation is integrated. PG001–PG007 and predicted relation locks passed ten focused tests and the full 130-combination development corpus on Windows and Linux. The frozen independent holdout is ready for scoring against a selected CLI build. [Rules and verification](docs/rules.md)
 
+DMG-07 is integrated. The CLI implements `init`, `policy validate`, `scan`, and `check`. It accepts trusted Git and manifest inputs and writes deterministic text and JSON reports. The Windows command suite passed, and the 130 public Git checks matched 48 passing, 58 denied, and 24 incomplete outcomes. [CLI contract and configuration](docs/cli.md)
+
 ## 19. Risk register
 
 | Risk | Likelihood and impact | Owner | Trigger and response |
