@@ -48,12 +48,24 @@ def source_details(source, expected_commit):
 
 def extract_source(source, commit, work):
     archive = work / "source.tar"
-    command("git", "--no-replace-objects", "archive", "--format=tar",
-            f"--output={archive}", commit, cwd=source)
+    command(
+        "git", "--no-replace-objects", "-c", "core.autocrlf=false", "-c", "core.eol=lf",
+        "archive", "--format=tar", f"--output={archive}", commit, cwd=source,
+    )
     checkout = work / "source"
     checkout.mkdir()
     with tarfile.open(archive) as stream:
         stream.extractall(checkout, filter="data")
+    for name in ("Cargo.lock", "rust-toolchain.toml"):
+        path = checkout / name
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"{name} must be a regular file in the source archive.")
+        reviewed = command(
+            "git", "--no-replace-objects", "rev-parse", "--verify", f"{commit}:{name}", cwd=source,
+        )
+        archived = command("git", "hash-object", "--no-filters", "--", str(path), cwd=source)
+        if archived != reviewed:
+            raise ValueError(f"Archived {name} differs from the reviewed Git blob.")
     return checkout
 
 
