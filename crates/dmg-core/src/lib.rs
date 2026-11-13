@@ -1,6 +1,7 @@
 //! Shared contracts for offline PostgreSQL migration analysis.
 
 pub mod coverage;
+pub mod diff;
 pub mod digest;
 pub mod history;
 pub mod inspection;
