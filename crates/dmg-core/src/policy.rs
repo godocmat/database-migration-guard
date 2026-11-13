@@ -5,10 +5,10 @@ mod evidence;
 
 pub use evaluate::{PolicyCheck, PolicyEvaluation};
 pub use evidence::{
-    ApprovalAuditV1, BaselineMatchV1, ExpectedRehearsalPlan, FindingApprovalV1, FindingBaselineV1,
-    FindingSelectorV1, MAX_POLICY_EVIDENCE_BYTES, MAX_POLICY_REHEARSAL_BYTES, PinnedPolicyEvidence,
-    PolicyAuditV1, PolicyCandidate, PolicyEvidenceError, PolicyEvidenceV1, PolicySubjectV1,
-    RehearsalAuditV1, RehearsalEvidencePinV1,
+    ApprovalAuditV1, BaselineMatchV1, BaselineReference, ExpectedRehearsalPlan, FindingApprovalV1,
+    FindingBaselineV1, FindingSelectorV1, MAX_POLICY_EVIDENCE_BYTES, MAX_POLICY_REHEARSAL_BYTES,
+    PinnedPolicyEvidence, PolicyAuditV1, PolicyCandidate, PolicyEvidenceError, PolicyEvidenceV1,
+    PolicySubjectV1, RehearsalAuditV1, RehearsalEvidencePinV1,
 };
 
 use std::collections::{BTreeMap, BTreeSet};

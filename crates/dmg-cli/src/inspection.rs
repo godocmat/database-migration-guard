@@ -83,6 +83,10 @@ fn parse_target_id(value: &str) -> Result<TargetId, InspectionEvidenceError> {
 }
 
 impl NativeHistoryArgs {
+    pub(crate) fn target_id(&self) -> Option<&TargetId> {
+        self.target_id.as_ref()
+    }
+
     pub(crate) fn load(
         &self,
         discovery: &mut Discovery,

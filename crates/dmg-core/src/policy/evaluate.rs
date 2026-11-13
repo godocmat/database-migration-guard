@@ -11,10 +11,10 @@ use crate::{
 };
 
 use super::{
-    ApprovalAuditV1, BaselineMatchV1, DecisionReason, DecisionReasonKind, DecisionStatus,
-    ExpectedRehearsalPlan, FindingApprovalV1, FindingSelectorV1, PinnedPolicyEvidence,
-    PolicyAuditV1, PolicyCandidate, PolicyDecision, PolicyEvidenceError, PolicyV1,
-    RehearsalAuditV1,
+    ApprovalAuditV1, BaselineMatchV1, BaselineReference, DecisionReason, DecisionReasonKind,
+    DecisionStatus, ExpectedRehearsalPlan, FindingApprovalV1, FindingSelectorV1,
+    PinnedPolicyEvidence, PolicyAuditV1, PolicyCandidate, PolicyDecision, PolicyEvidenceError,
+    PolicyV1, RehearsalAuditV1,
 };
 
 pub struct PolicyCheck<'a> {
@@ -23,6 +23,7 @@ pub struct PolicyCheck<'a> {
     pub plan: &'a MigrationPlan,
     pub coverage: &'a Coverage,
     pub evidence: Result<Option<&'a PinnedPolicyEvidence>, PolicyEvidenceError>,
+    pub baseline_reference: Option<BaselineReference<'a>>,
     pub rehearsal: Result<Option<&'a [u8]>, PolicyEvidenceError>,
     pub expected_rehearsal_plan: Option<&'a ExpectedRehearsalPlan>,
 }
@@ -155,6 +156,13 @@ impl PolicyV1 {
             .as_ref()
             .ok_or(PolicyEvidenceError::MissingEvidenceScope)?;
         bundle.verify_subject(policy, check.policy_digest, &check.candidate, check.plan)?;
+        if let Some(baseline) = &bundle.evidence().baseline {
+            let reference = check
+                .baseline_reference
+                .as_ref()
+                .ok_or(PolicyEvidenceError::InvalidBaselineReference)?;
+            baseline.verify_reference(reference)?;
+        }
         Ok(Some(bundle))
     }
 
@@ -348,7 +356,7 @@ fn approval_matches(
     }
 }
 
-fn unique_findings(
+pub(super) fn unique_findings(
     plan: &MigrationPlan,
     findings: &[Finding],
 ) -> BTreeMap<usize, FindingSelectorV1> {

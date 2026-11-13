@@ -79,6 +79,38 @@ A scan can succeed with high or critical findings. A check validates invocation 
 
 Text and JSON reports go to stdout unless `--output` is supplied. Fatal diagnostics go to stderr. Both denied and incomplete analyses still emit their report. A file report replaces its destination atomically after rendering succeeds. An invalid invocation or configuration leaves an existing report in place. Findings include repository-relative source coordinates and explanations. Reports omit migration SQL text and include the original policy SHA-256 for checks. [Report schema and source coordinates](../DECISIONS.md)
 
+### Protected policy evidence
+
+Add `[evidence]` to trusted policy TOML to authorize evidence for an opaque repository and target. With the example below, each `PG001` finding requires approval and a rehearsal completed in the past hour. A critical `PG001` finding can pass that rule only with an exact approval that reviewed the successful rehearsal. Its severity stays critical in the report. Other critical findings block the check. A baseline may suppress the severity threshold for an exact matching noncritical finding. A baseline match leaves every approval, integrity, and coverage requirement in force.
+
+```toml
+[evidence]
+repository_id = "example-repo"
+target_id = "production"
+require_baseline = false
+require_approvals = ["PG001"]
+allow_critical_approvals = ["PG001"]
+
+[evidence.rehearsal]
+rules = ["PG001"]
+max_age_seconds = 3600
+require_complete_schema = true
+```
+
+Omit `allow_critical_approvals` to use the default critical denial. Every rule in that list must also require approval and rehearsal. Omit `[evidence.rehearsal]` for checks that use only baselines or approvals. Within the rehearsal table, omit `rules` or use an empty list to require rehearsal on every check. `require_complete_schema` also requires complete before and after schema observations and diff coverage on successful runs. The age limit is an integer greater than zero. If supplied, the native history target ID must equal the policy target ID.
+
+```sh
+dmg check --repo . --config /trusted/dmg.toml --policy /trusted/policy.toml \
+  --base "$BASE_SHA" --head "$HEAD_SHA" \
+  --policy-evidence /trusted/evidence.json \
+  --policy-evidence-sha256 "$TRUSTED_EVIDENCE_SHA256" \
+  --rehearsal-report rehearsal.json --format json --output report.json
+```
+
+Supply the bundle SHA-256 from the protected workflow that authorized it. In that workflow, use the reviewed revision, exact migration sources, approved image, and approved setup to establish the expected rehearsal binding. Retain the authorized bundle and its digest independently of the candidate artifacts. The checker validates the exact report bytes against the pin and independently reconstructs the ordered execution plan and statement spans from Git. It also checks the report against the authorized environment, configured search path, original policy and configuration, current clock, and verified cleanup.
+
+An absent, stale, mismatched, or malformed required rehearsal gives an incomplete check. Supplying optional evidence also triggers verification. A verified rehearsal with a PostgreSQL migration failure denies when other required coverage and evidence are complete. A missing, expired, or mismatched approval denies the finding when its rule requires approval. [Policy evidence JSON format](policy-evidence.md)
+
 ## Review formats
 
 Render a saved version 1 JSON report as a Markdown summary or GitHub Actions annotations. Both formats bound their output and escape report-supplied content. Rendering returns success when the requested output is written. Use the original `dmg check` status for the gate decision.

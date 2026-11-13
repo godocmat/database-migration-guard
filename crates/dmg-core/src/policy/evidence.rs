@@ -4,12 +4,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    coverage::CoverageStatus,
+    coverage::{Coverage, CoverageStatus},
     digest::ContentDigest,
     history::forward_inventory_digest,
     inspection::{TargetId, is_catalog_identifier},
     migration::{
-        IntegrityBasis, MigrationAdapter, MigrationFile, MigrationIdentity, MigrationPlan,
+        IntegrityBasis, MigrationAdapter, MigrationDirection, MigrationFile, MigrationIdentity,
+        MigrationPlan,
     },
     rehearsal::{
         RehearsalBindingV1, RehearsalMigrationState, RehearsalMigrationV1, RehearsalOutcome,
@@ -55,15 +56,18 @@ pub struct FindingSelectorV1 {
 
 impl FindingSelectorV1 {
     pub(crate) fn for_finding(finding: &Finding, file: &MigrationFile) -> Option<Self> {
-        (finding.migration == file.identity && finding.span.path == file.path).then(|| Self {
-            rule_id: finding.rule_id,
-            migration: finding.migration.clone(),
-            path: finding.span.path.clone(),
-            migration_digest: file.digest,
-            statement_bytes: finding.span.bytes,
-            finding_fingerprint: finding.fingerprint,
-            object: finding.object.clone(),
-        })
+        (file.direction == MigrationDirection::Forward
+            && finding.migration == file.identity
+            && finding.span.path == file.path)
+            .then(|| Self {
+                rule_id: finding.rule_id,
+                migration: finding.migration.clone(),
+                path: finding.span.path.clone(),
+                migration_digest: file.digest,
+                statement_bytes: finding.span.bytes,
+                finding_fingerprint: finding.fingerprint,
+                object: finding.object.clone(),
+            })
     }
 
     fn is_valid(&self) -> bool {
@@ -84,6 +88,47 @@ impl FindingSelectorV1 {
 pub struct FindingBaselineV1 {
     pub reference_commit: String,
     pub findings: Vec<FindingSelectorV1>,
+}
+
+/// An independently analyzed Git reference used to verify baseline findings.
+pub struct BaselineReference<'a> {
+    pub plan: &'a MigrationPlan,
+    pub coverage: &'a Coverage,
+    pub findings: &'a [Finding],
+}
+
+impl FindingBaselineV1 {
+    pub(super) fn verify_reference(
+        &self,
+        reference: &BaselineReference<'_>,
+    ) -> Result<(), PolicyEvidenceError> {
+        let invalid = PolicyEvidenceError::InvalidBaselineReference;
+        if reference.plan.coverage.status() == CoverageStatus::Incomplete
+            || reference.coverage.status() == CoverageStatus::Incomplete
+            || !matches!(
+                reference.plan.integrity.as_ref().map(|comparison| &comparison.basis),
+                Some(IntegrityBasis::Git { base_commit, head_commit })
+                    if base_commit == &self.reference_commit && head_commit == &self.reference_commit
+            )
+        {
+            return Err(invalid);
+        }
+        if self.findings.is_empty() {
+            return Ok(());
+        }
+        let matches: BTreeSet<_> =
+            super::evaluate::unique_findings(reference.plan, reference.findings)
+                .into_values()
+                .collect();
+        if self
+            .findings
+            .iter()
+            .any(|selector| !matches.contains(selector))
+        {
+            return Err(invalid);
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -208,7 +253,7 @@ impl PinnedPolicyEvidence {
         self.digest
     }
 
-    pub(super) fn verify_subject(
+    pub fn verify_subject(
         &self,
         policy: &EvidencePolicy,
         policy_digest: ContentDigest,
@@ -381,7 +426,7 @@ fn complete_schema_evidence(report: &RehearsalReportV1) -> bool {
         && report
             .schema_diff
             .as_ref()
-            .is_some_and(|diff| diff.coverage == CoverageStatus::Complete && diff.gaps.is_empty())
+            .is_some_and(|diff| diff.coverage == CoverageStatus::Complete)
 }
 
 fn same_migration_plan(expected: &[RehearsalMigrationV1], actual: &[RehearsalMigrationV1]) -> bool {
@@ -430,12 +475,16 @@ fn consistent_outcome(report: &RehearsalReportV1) -> bool {
         })
         && report.failure.as_ref().is_some_and(|failure| {
             failure.path.as_ref() == Some(&failed.path)
+                && failure.sqlstate.as_deref() != Some("57014")
                 && failure.span.as_ref().is_none_or(|span| {
                     failed
                         .groups
                         .iter()
                         .flat_map(|group| &group.statements)
-                        .any(|statement| &statement.span == span)
+                        .any(|statement| {
+                            &statement.span == span
+                                && statement.state == RehearsalStatementState::Failed
+                        })
                 })
         })
 }
@@ -456,6 +505,8 @@ pub enum PolicyEvidenceError {
     BundleDigest,
     #[error("The policy evidence bundle is malformed or contains ambiguous records")]
     InvalidBundle,
+    #[error("The policy evidence bundle references a rule outside the current ruleset")]
+    UnknownEvidenceRule,
     #[error("The protected policy must identify the repository and target for policy evidence")]
     MissingEvidenceScope,
     #[error(
@@ -464,6 +515,10 @@ pub enum PolicyEvidenceError {
     SubjectMismatch,
     #[error("The policy requires a trusted finding baseline")]
     MissingBaseline,
+    #[error(
+        "Could not independently verify the trusted baseline against the reviewed Git reference"
+    )]
+    InvalidBaselineReference,
     #[error("The policy requires a fresh rehearsal report and a protected evidence pin")]
     MissingRehearsal,
     #[error(

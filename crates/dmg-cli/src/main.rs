@@ -29,7 +29,7 @@ use dmg_discovery::{
 };
 use dmg_postgres::parse_plan;
 use dmg_rules::{Analysis, RULESET_VERSION, analyze};
-use policy::ValidatedPolicy;
+use policy::{PolicyAnalysis, PolicyEvidenceArgs, ValidatedPolicy};
 use render::{Terminal, write_file, write_json, write_report, write_text};
 
 const INVALID_INPUT: u8 = 2;
@@ -71,6 +71,9 @@ enum Command {
         /// Trusted policy TOML supplied by the caller.
         #[arg(long, value_name = "FILE")]
         policy: PathBuf,
+
+        #[command(flatten)]
+        evidence: PolicyEvidenceArgs,
     },
     /// Inspect authorized PostgreSQL catalogs or a native history table over verified TLS.
     Inspect(inspection::InspectArgs),
@@ -224,10 +227,14 @@ fn run(command: Command) -> Result<u8, Failure> {
             status_line("Policy is valid.")
         }
         Command::Scan(analysis) => run_analysis(analysis, None),
-        Command::Check { analysis, policy } => {
+        Command::Check {
+            analysis,
+            policy,
+            evidence,
+        } => {
             let policy = ValidatedPolicy::load(&policy)
                 .map_err(|error| Failure::invalid(error.to_string()))?;
-            run_analysis(analysis, Some(&policy))
+            run_analysis(analysis, Some((&policy, &evidence)))
         }
         Command::Inspect(args) => inspection::run(args),
         Command::Diff(args) => diff::run(args),
@@ -265,17 +272,57 @@ fn status_line(message: &str) -> Result<u8, Failure> {
         .map_err(|_| Failure::operational("could not write command output", OPERATIONAL_FAILURE))
 }
 
-fn run_analysis(args: AnalysisArgs, policy: Option<&ValidatedPolicy>) -> Result<u8, Failure> {
+fn run_analysis(
+    args: AnalysisArgs,
+    policy: Option<(&ValidatedPolicy, &PolicyEvidenceArgs)>,
+) -> Result<u8, Failure> {
     let project =
         Project::load(&args.config).map_err(|error| Failure::invalid(error.to_string()))?;
     let revisions = args.base.as_deref().zip(args.head.as_deref());
     let mut discovery = discover_project(&args.repo, revisions, &project)?;
     load_evidence(&args, &mut discovery, project.target);
+    if let Some(((policy, _), target_id)) = policy.zip(args.native_history.target_id())
+        && policy
+            .target_id()
+            .is_some_and(|expected| expected != target_id)
+    {
+        let mut gaps = discovery.plan.coverage.gaps().to_vec();
+        gaps.push(evidence_gap(
+            CoverageGapKind::MissingAppliedHistory,
+            "Native history evidence",
+            "the opaque target ID differs from the protected policy".into(),
+        ));
+        discovery.plan.coverage = Coverage::from_gaps(gaps);
+        discovery.plan.applied_history = None;
+    }
 
     let plan = parse_plan(&discovery.plan, project.target, |path| {
         discovery.source_bytes(path)
     });
-    // parse_plan returns one entry for each forward in inventory order.
+    let Analysis {
+        coverage,
+        mut findings,
+        locks,
+    } = analyze(&plan, project.target, &project.rules);
+    let (decision, audit) = policy.map_or((None, None), |(policy, evidence)| {
+        let evaluated = policy.evaluate(
+            evidence,
+            PolicyAnalysis {
+                repository: &args.repo,
+                discovery: &discovery,
+                project: &project,
+                coverage: &coverage,
+            },
+            &mut findings,
+        );
+        (Some(evaluated.decision), evaluated.audit)
+    });
+    let exit = analysis_exit(
+        project.exit_codes,
+        &coverage,
+        decision.as_ref().map(|decision| decision.status),
+    );
+    // Keep the runner declarations available to rehearsal planning before reporting effective modes.
     for (file, parsed) in discovery
         .plan
         .inventory
@@ -285,17 +332,6 @@ fn run_analysis(args: AnalysisArgs, policy: Option<&ValidatedPolicy>) -> Result<
     {
         file.execution = parsed.execution;
     }
-    let Analysis {
-        coverage,
-        mut findings,
-        locks,
-    } = analyze(&plan, project.target, &project.rules);
-    let decision = policy.map(|policy| policy.evaluate(&discovery.plan, &coverage, &mut findings));
-    let exit = analysis_exit(
-        project.exit_codes,
-        &coverage,
-        decision.as_ref().map(|decision| decision.status),
-    );
     let report = ReportV1::new(
         ReportMetadata {
             tool_version: env!("CARGO_PKG_VERSION").into(),
@@ -307,7 +343,8 @@ fn run_analysis(args: AnalysisArgs, policy: Option<&ValidatedPolicy>) -> Result<
         findings,
         decision,
     )
-    .with_relation_locks(locks);
+    .with_relation_locks(locks)
+    .with_policy_audit(audit);
     write_report(args.output.as_deref(), |out| match args.format {
         ReportFormat::Text => write_text(&report, out),
         ReportFormat::Json => write_json(&report, out),
