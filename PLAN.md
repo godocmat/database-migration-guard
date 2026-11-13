@@ -329,7 +329,7 @@ DMG-13 trusted baselines, scoped approvals, and rehearsal evidence checks are in
 
 DMG-15 boundary fixes and ruleset 2 are integrated. The staged Windows candidate matched all 100 frozen holdout gate outcomes and 56 of 64 exact required findings. The Linux x86-64 `af21401` benchmark met both proposed limits on 2 vCPUs and 8 GiB. Remaining finding and diagnostic discrepancies are recorded for release review. [Boundary, accuracy, and performance](PROGRESS.md#dmg-15-frozen-holdout-rescore)
 
-DMG-16 local release staging and operator documentation are integrated. The exact Windows package and SBOM reproduced across two native builds and passed local install and rollback. Clean disconnected Windows and native macOS arm64 checks, signatures, and release-owner approval remain pending. [Release acceptance matrix](docs/release.md#acceptance-matrix)
+DMG-16 local release staging and operator documentation are integrated. The Windows and Linux x86-64 packages and SBOMs reproduced across two native builds on each host and passed install and rollback. Linux install ran in a disconnected guest. Clean disconnected Windows and native macOS arm64 checks, signatures, and release-owner approval remain pending. [Release acceptance matrix](docs/release.md#acceptance-matrix)
 
 ## 19. Risk register
 

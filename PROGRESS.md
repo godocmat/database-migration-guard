@@ -87,6 +87,8 @@ The independent boundary review at `192d13b` made Unix CLI file opens nonblockin
 
 Cargo Audit 0.22.2 evaluated the exact integrated Cargo.lock against RustSec advisory database `4ef2df8e806a65e2f1ecc14f56f51249062b23d6`. It reported zero known vulnerabilities and zero warnings across 226 locked packages. The local scan used a pinned advisory checkout and skipped the online yanked-package check. Separate evidence covers vendored native code, runtime packages, and container contents. [RustSec advisory database](https://github.com/RustSec/advisory-db/tree/4ef2df8e806a65e2f1ecc14f56f51249062b23d6)
 
+The staged Windows `af21401` executable also passed 201 generated, bounded CLI inputs across PostgreSQL targets 15–18. The cases included 48 valid source-span and line-ending variants, 60 malformed SQL inputs, 48 invalid project configurations, and 45 invalid policy files. The probe checked deterministic repeated reports, incomplete SQL coverage, and preservation of an existing report on invalid configuration. The probe covered the installed CLI and used synthetic inputs without a database connection.
+
 ## DMG-16 local OCI preview
 
 The `ae83f53` Linux x86-64 release executable cross-compiled with Rust 1.100.0, Zig 0.16.0, and the glibc 2.39 target. Its SHA-256 is `66bc72d299d2525805789d8025aa2c2c65e2ae9ea812a14135fac92b6029b80b`. A local unsigned OCI layout assembled that executable and the pinned Ubuntu 24.04 `buildpack-deps:noble-scm` base into manifest `sha256:7a4362cde4d857107b833d254858e707511a9c3531ff990c51d5652d8e1bdb3c`. Static verification checked the base and added layer digests, Linux x86-64 ELF header, executable permissions, exact executable digest, and non-root entrypoint configuration.
@@ -96,3 +98,7 @@ Syft 1.57.1 detected 740 image filesystem components, including Git and glibc. T
 ## DMG-16 integrated Windows package
 
 Two independent native stages of `af21401` on Windows x86-64 reproduced the executable, manifest, CycloneDX 1.5 SBOM and checksums byte for byte. The installed candidate passed the 130 public checks, three GitHub replay outcomes, ten GitLab replay tests, and revision-based upgrade and rollback with the retained pilot. Formatting, strict Clippy, and 152 active workspace tests passed. The smoke used isolated local profiles on the existing host with networking enabled. Clean disconnected Windows installation, hosted enforcement, and signatures remain pending. [Integrated Windows package verification](docs/research/integrated-windows-verification.md)
+
+## DMG-16 integrated Linux package
+
+Two native Linux x86-64 stages of `af21401` on an offline Ubuntu 24.04.5 guest reproduced all four package files byte for byte. The exported package passed independent manifest and CycloneDX 1.5 verification. A regular user ran the installed smoke, both local CI replays, all 130 public cases, and rollback to the retained pilot. The Linux and earlier Windows staging manifests reflect LF and CRLF build inputs respectively. [Integrated Linux package and exact inputs](docs/research/integrated-linux-verification.md)
