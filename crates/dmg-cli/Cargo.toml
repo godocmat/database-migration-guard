@@ -1,6 +1,6 @@
 [package]
 name = "dmg-cli"
-description = "Offline PostgreSQL migration review and policy checks"
+description = "PostgreSQL migration review, policy checks, and opt-in inspection"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,6 +14,7 @@ path = "src/main.rs"
 clap = { version = "4.6", features = ["derive"] }
 dmg-core = { path = "../dmg-core" }
 dmg-discovery = { path = "../dmg-discovery" }
+dmg-inspect = { path = "../dmg-inspect" }
 dmg-postgres = { path = "../dmg-postgres" }
 dmg-report = { path = "../dmg-report" }
 dmg-rules = { path = "../dmg-rules" }
@@ -21,4 +22,5 @@ serde.workspace = true
 serde_json.workspace = true
 tempfile = "3"
 thiserror.workspace = true
+tokio = { version = "=1.54.1", features = ["rt"] }
 toml.workspace = true

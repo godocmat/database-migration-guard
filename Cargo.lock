@@ -412,6 +412,7 @@ dependencies = [
  "clap",
  "dmg-core",
  "dmg-discovery",
+ "dmg-inspect",
  "dmg-postgres",
  "dmg-report",
  "dmg-rules",
@@ -419,6 +420,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+ "tokio",
  "toml",
 ]
 

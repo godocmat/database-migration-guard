@@ -2,6 +2,8 @@
 
 DMG-10 collection and DMG-11 comparisons use the version 1 types in `dmg_core::inspection`, `dmg_core::snapshot`, and `dmg_core::history`. Keep full catalog artifacts in protected storage. Deparsed expressions can contain sensitive literals, and qualified identifiers can disclose schema design. Keep endpoints, roles, credentials, server messages, and application row values out of these artifacts. `TargetId` is an opaque identifier supplied by the operator. It carries no connection details. [Catalog feasibility and transport evidence](research/postgresql-inspection.md)
 
+Use the protected CLI workflow to collect either evidence type or reconcile a saved native history artifact in a scan or check. [Inspection command](inspect.md)
+
 ## Observation and scope
 
 `InspectionScope` is a nonempty list of up to 32 unique non-system schemas. `InspectionEvidenceV1` records the effective observation of every requested schema. A visible empty schema, a missing schema, denied access, and an unavailable read have distinct states. An attached `SchemaSnapshotV1` includes exactly the visible schema names. An unavailable collection can return observation and gap data without a snapshot. `Observation` carries the target ID, optional numeric server version, and UTC Unix time in whole seconds. The numeric server version covers PostgreSQL 15–18 catalog observations independently of the declared offline parser target.

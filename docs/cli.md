@@ -49,6 +49,8 @@ In a protected workflow, load the configuration and policy from trusted inputs a
 
 For worktree integrity evidence, pair `--integrity-manifest FILE` with `--integrity-sha256 SHA256`. Pair `--applied-manifest FILE` with `--applied-sha256 SHA256` for authorized applied history in either input mode. Use lowercase SHA-256 digests from a trusted source. A supplied manifest that cannot be read or verified produces an incomplete report. Git integrity and applied-history evidence have separate provenance. [Manifest formats](migration-formats.md#trusted-manifests)
 
+For authorized catalog collection or native history from SQLx, Flyway, Goose, or Supabase, use the explicit inspection workflow. An offline scan or check can import a pinned history artifact for its discovered candidate. [Inspection and saved history](inspect.md)
+
 ## Policy and process exit
 
 ```toml

@@ -1,8 +1,9 @@
-//! Headless offline CLI for PostgreSQL migration review.
+//! Headless CLI for PostgreSQL migration review and opt-in inspection.
 #![forbid(unsafe_code)]
 
 mod config;
 mod diff;
+mod inspection;
 mod policy;
 mod render;
 
@@ -71,6 +72,8 @@ enum Command {
         #[arg(long, value_name = "FILE")]
         policy: PathBuf,
     },
+    /// Inspect authorized PostgreSQL catalogs or a native history table over verified TLS.
+    Inspect(inspection::InspectArgs),
     /// Compare saved PostgreSQL schemas and application contracts.
     Diff(diff::DiffArgs),
     /// Render a saved versioned JSON report for review.
@@ -132,6 +135,9 @@ struct AnalysisArgs {
     /// SHA-256 of the trusted applied-history manifest.
     #[arg(long, value_name = "SHA256", requires = "applied_manifest", value_parser = parse_digest)]
     applied_sha256: Option<ContentDigest>,
+
+    #[command(flatten)]
+    native_history: inspection::NativeHistoryArgs,
 
     /// Report output format.
     #[arg(long, value_enum, default_value = "text")]
@@ -223,6 +229,7 @@ fn run(command: Command) -> Result<u8, Failure> {
                 .map_err(|error| Failure::invalid(error.to_string()))?;
             run_analysis(analysis, Some(&policy))
         }
+        Command::Inspect(args) => inspection::run(args),
         Command::Diff(args) => diff::run(args),
         Command::Report {
             input,
@@ -261,14 +268,9 @@ fn status_line(message: &str) -> Result<u8, Failure> {
 fn run_analysis(args: AnalysisArgs, policy: Option<&ValidatedPolicy>) -> Result<u8, Failure> {
     let project =
         Project::load(&args.config).map_err(|error| Failure::invalid(error.to_string()))?;
-    let mut discovery = if let Some((base, head)) = args.base.as_deref().zip(args.head.as_deref()) {
-        let revisions =
-            GitRevisions::new(base, head).map_err(|error| Failure::invalid(error.to_string()))?;
-        discover_git(&args.repo, &revisions, &project.discovery)
-    } else {
-        discover_worktree(&args.repo, &project.discovery)
-    };
-    load_evidence(&args, &mut discovery);
+    let revisions = args.base.as_deref().zip(args.head.as_deref());
+    let mut discovery = discover_project(&args.repo, revisions, &project)?;
+    load_evidence(&args, &mut discovery, project.target);
 
     let plan = parse_plan(&discovery.plan, project.target, |path| {
         discovery.source_bytes(path)
@@ -326,8 +328,22 @@ fn analysis_exit(codes: ExitCodes, coverage: &Coverage, decision: Option<Decisio
     }
 }
 
-fn load_evidence(args: &AnalysisArgs, discovery: &mut Discovery) {
-    let mut gaps = Vec::new();
+fn discover_project(
+    repository: &Path,
+    revisions: Option<(&str, &str)>,
+    project: &Project,
+) -> Result<Discovery, Failure> {
+    Ok(if let Some((base, head)) = revisions {
+        let revisions =
+            GitRevisions::new(base, head).map_err(|error| Failure::invalid(error.to_string()))?;
+        discover_git(repository, &revisions, &project.discovery)
+    } else {
+        discover_worktree(repository, &project.discovery)
+    })
+}
+
+fn load_evidence(args: &AnalysisArgs, discovery: &mut Discovery, target: PostgresTarget) {
+    let mut gaps = args.native_history.load(discovery, target);
     if let Some((path, digest)) = args
         .integrity_manifest
         .as_deref()
