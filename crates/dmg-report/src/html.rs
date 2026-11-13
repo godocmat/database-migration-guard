@@ -89,6 +89,23 @@ pub fn write_html(report: &ReportV1, mut output: impl Write) -> io::Result<()> {
         "Forward migrations selected",
         selected.map_or_else(|| "Unresolved".into(), |paths| paths.len().to_string()),
     )?;
+    if let Some(catalog) = report.catalog_context() {
+        fact(
+            &mut output,
+            "Catalog coverage",
+            coverage_name(catalog.coverage),
+        )?;
+        fact(
+            &mut output,
+            "Catalog target",
+            text(catalog.observation.target_id.as_str()),
+        )?;
+        fact(
+            &mut output,
+            "Catalog artifact SHA-256",
+            catalog.artifact_digest,
+        )?;
+    }
     if let Some(integrity) = &report.migrations().integrity {
         match &integrity.basis {
             IntegrityBasis::Git {

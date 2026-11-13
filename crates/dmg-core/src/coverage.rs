@@ -80,6 +80,7 @@ pub enum CoverageGapKind {
     UnpairedMigration,
     MissingIntegrityEvidence,
     MissingAppliedHistory,
+    MissingCatalogEvidence,
     ParseError,
     UnsupportedSql,
     IncompatibleTarget,

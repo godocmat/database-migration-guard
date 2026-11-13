@@ -1,6 +1,7 @@
 //! Headless CLI for PostgreSQL migration review and opt-in inspection.
 #![forbid(unsafe_code)]
 
+mod catalog_context;
 mod config;
 mod diff;
 mod inspection;
@@ -20,6 +21,7 @@ use config::{ExitCodes, Project};
 use dmg_core::{
     coverage::{Coverage, CoverageGap, CoverageGapKind, CoverageStatus, DiagnosticScope},
     digest::ContentDigest,
+    inspection::CatalogContextV1,
     migration::MigrationDirection,
     policy::DecisionStatus,
     report::{ReportMetadata, ReportV1},
@@ -30,7 +32,7 @@ use dmg_discovery::{
     reconcile_applied_manifest,
 };
 use dmg_postgres::parse_plan;
-use dmg_rules::{Analysis, RULESET_VERSION, analyze};
+use dmg_rules::{Analysis, RULESET_VERSION, analyze, analyze_with_catalog};
 use policy::{PolicyAnalysis, PolicyEvidenceArgs, ValidatedPolicy};
 use render::{Terminal, write_file, write_json, write_report, write_text};
 
@@ -132,6 +134,9 @@ struct AnalysisArgs {
 
     #[command(flatten)]
     native_history: inspection::NativeHistoryArgs,
+
+    #[command(flatten)]
+    catalog: catalog_context::CatalogEvidenceArgs,
 
     /// Report output format.
     #[arg(long, value_enum, default_value = "text")]
@@ -261,11 +266,40 @@ fn run_analysis(
     let plan = parse_plan(&discovery.plan, project.target, |path| {
         discovery.source_bytes(path)
     });
+    let (catalog, catalog_issue) = match args.catalog.load(
+        project.target,
+        policy.and_then(|(policy, _)| policy.target_id()),
+        args.native_history.target_id(),
+    ) {
+        Ok(catalog) => {
+            let issue = catalog
+                .as_ref()
+                .and_then(|catalog| catalog.unavailable_reason());
+            (catalog, issue)
+        }
+        Err(issue) => (None, Some(issue)),
+    };
     let Analysis {
-        coverage,
+        mut coverage,
         mut findings,
         locks,
-    } = analyze(&plan, project.target, &project.rules);
+    } = match &catalog {
+        Some(catalog) => analyze_with_catalog(
+            &plan,
+            project.target,
+            &project.rules,
+            &catalog.evidence,
+            catalog.digest,
+        ),
+        None => analyze(&plan, project.target, &project.rules),
+    };
+    if let Some(issue) = catalog_issue {
+        let mut gaps = coverage.gaps().to_vec();
+        gaps.push(catalog_context::catalog_gap(issue));
+        coverage = Coverage::from_gaps(gaps);
+    }
+    let catalog_context =
+        catalog.map(|catalog| CatalogContextV1::summarize(&catalog.evidence, catalog.digest));
     let (decision, audit) = policy.map_or((None, None), |(policy, evidence)| {
         let evaluated = policy.evaluate(
             evidence,
@@ -306,7 +340,8 @@ fn run_analysis(
         decision,
     )
     .with_relation_locks(locks)
-    .with_policy_audit(audit);
+    .with_policy_audit(audit)
+    .with_catalog_context(catalog_context);
     write_report(args.output.as_deref(), |out| match args.format {
         ReportFormat::Text => write_text(&report, out),
         ReportFormat::Json => write_json(&report, out),

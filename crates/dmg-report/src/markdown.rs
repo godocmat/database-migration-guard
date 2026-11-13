@@ -20,7 +20,7 @@ const MAX_REASONS: usize = 12;
 const MAX_LOCKS: usize = 12;
 const MAX_POLICY_MATCHES: usize = 12;
 const MAX_RELATED_PATHS: usize = 3;
-const MAX_FINDING_EVIDENCE: usize = 2;
+const MAX_FINDING_EVIDENCE: usize = 3;
 const MAX_TEXT_BYTES: usize = 360;
 const MAX_IDENTIFIER_BYTES: usize = 240;
 
@@ -38,6 +38,15 @@ pub fn write_markdown(report: &ReportV1, mut output: impl Write) -> io::Result<(
         literal(&metadata.ruleset_version, 64),
     )?;
     writeln!(output, "- Analysis coverage **{coverage}**")?;
+    if let Some(catalog) = report.catalog_context() {
+        writeln!(
+            output,
+            "- Catalog coverage **{}** · target {} · artifact SHA-256 `{}`",
+            coverage_name(catalog.coverage),
+            literal(catalog.observation.target_id.as_str(), 128),
+            catalog.artifact_digest
+        )?;
+    }
     if let Some(paths) = &report.migrations().selected_forwards {
         writeln!(output, "- Forward migrations selected **{}**", paths.len())?;
     } else {

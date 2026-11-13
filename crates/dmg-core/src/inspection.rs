@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
+    coverage::CoverageStatus,
+    digest::ContentDigest,
     history::NativeHistoryEvidenceV1,
     risk::DatabaseObject,
     schema::SchemaVersionV1,
@@ -325,6 +327,85 @@ impl InspectionEvidenceV1 {
 
     pub fn gaps(&self) -> &[InspectionGap] {
         &self.gaps
+    }
+
+    /// Coverage of the requested catalog projections. Planner estimates are advisory.
+    pub fn catalog_coverage(&self) -> CoverageStatus {
+        let complete = self.observation().server_version_num.is_some()
+            && (self.snapshot().is_some()
+                || self
+                    .scope()
+                    .iter()
+                    .all(|schema| schema.state == SchemaState::Missing))
+            && self
+                .scope()
+                .iter()
+                .all(|schema| matches!(schema.state, SchemaState::Visible | SchemaState::Missing))
+            && self
+                .catalog_gaps()
+                .all(|gap| match (&gap.scope, gap.field, gap.reason) {
+                    (
+                        InspectionGapScope::Schema { schema },
+                        InspectionField::Scope,
+                        InspectionGapReason::Missing,
+                    ) => self.scope().iter().any(|observation| {
+                        observation.schema == *schema && observation.state == SchemaState::Missing
+                    }),
+                    (_, InspectionField::PlannerRows | InspectionField::EstimatedHeapBytes, _) => {
+                        true
+                    }
+                    _ => false,
+                });
+        if complete {
+            CoverageStatus::Complete
+        } else {
+            CoverageStatus::Incomplete
+        }
+    }
+
+    fn catalog_gaps(&self) -> impl Iterator<Item = &InspectionGap> {
+        self.gaps().iter().chain(
+            self.snapshot()
+                .into_iter()
+                .flat_map(|snapshot| snapshot.gaps()),
+        )
+    }
+}
+
+/// Provenance and coverage of a catalog artifact used by an offline analysis.
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct CatalogContextV1 {
+    pub artifact_digest: ContentDigest,
+    pub observation: Observation,
+    pub scope: Vec<SchemaObservation>,
+    pub coverage: CoverageStatus,
+    pub gaps: Vec<CatalogContextGap>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+pub struct CatalogContextGap {
+    pub field: InspectionField,
+    pub reason: InspectionGapReason,
+}
+
+impl CatalogContextV1 {
+    pub fn summarize(evidence: &InspectionEvidenceV1, artifact_digest: ContentDigest) -> Self {
+        let mut gaps: Vec<_> = evidence
+            .catalog_gaps()
+            .map(|gap| CatalogContextGap {
+                field: gap.field,
+                reason: gap.reason,
+            })
+            .collect();
+        gaps.sort_unstable();
+        gaps.dedup();
+        Self {
+            artifact_digest,
+            observation: evidence.observation().clone(),
+            scope: evidence.scope().to_vec(),
+            coverage: evidence.catalog_coverage(),
+            gaps,
+        }
     }
 }
 

@@ -141,6 +141,7 @@ fn gap_name(kind: CoverageGapKind) -> &'static str {
         CoverageGapKind::UnpairedMigration => "Unpaired migration",
         CoverageGapKind::MissingIntegrityEvidence => "Missing integrity evidence",
         CoverageGapKind::MissingAppliedHistory => "Missing applied history",
+        CoverageGapKind::MissingCatalogEvidence => "Missing catalog evidence",
         CoverageGapKind::ParseError => "SQL parse error",
         CoverageGapKind::UnsupportedSql => "Unsupported SQL",
         CoverageGapKind::IncompatibleTarget => "Incompatible PostgreSQL target",

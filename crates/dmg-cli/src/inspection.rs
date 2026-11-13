@@ -4,13 +4,10 @@ use std::path::{Path, PathBuf};
 
 use clap::Args;
 use dmg_core::{
-    coverage::{CoverageGap, CoverageGapKind},
+    coverage::{CoverageGap, CoverageGapKind, CoverageStatus},
     digest::ContentDigest,
     history::{NativeHistoryCoverage, NativeHistoryEvidenceV1, forward_inventory_digest},
-    inspection::{
-        InspectionEvidenceError, InspectionEvidenceV1, InspectionField, InspectionGapReason,
-        InspectionGapScope, InspectionScope, SchemaState, TargetId,
-    },
+    inspection::{InspectionEvidenceError, InspectionScope, TargetId},
     snapshot::QualifiedName,
     target::PostgresTarget,
 };
@@ -78,7 +75,7 @@ pub(crate) struct NativeHistoryArgs {
     target_id: Option<TargetId>,
 }
 
-fn parse_target_id(value: &str) -> Result<TargetId, InspectionEvidenceError> {
+pub(crate) fn parse_target_id(value: &str) -> Result<TargetId, InspectionEvidenceError> {
     TargetId::new(value)
 }
 
@@ -292,7 +289,7 @@ pub(crate) fn run(args: InspectArgs) -> Result<u8, Failure> {
         save_evidence(
             args.output.as_deref(),
             &evidence,
-            catalog_complete(&evidence),
+            evidence.catalog_coverage() == CoverageStatus::Complete,
         )
     }
 }
@@ -345,33 +342,6 @@ fn history_options(
             )
         })?;
     Ok((inventory, options))
-}
-
-fn catalog_complete(evidence: &InspectionEvidenceV1) -> bool {
-    evidence
-        .scope()
-        .iter()
-        .all(|schema| matches!(schema.state, SchemaState::Visible | SchemaState::Missing))
-        && evidence
-            .gaps()
-            .iter()
-            .chain(
-                evidence
-                    .snapshot()
-                    .into_iter()
-                    .flat_map(|snapshot| snapshot.gaps()),
-            )
-            .all(|gap| match (&gap.scope, gap.field, gap.reason) {
-                (
-                    InspectionGapScope::Schema { schema },
-                    InspectionField::Scope,
-                    InspectionGapReason::Missing,
-                ) => evidence.scope().iter().any(|observation| {
-                    observation.schema == *schema && observation.state == SchemaState::Missing
-                }),
-                (_, InspectionField::PlannerRows | InspectionField::EstimatedHeapBytes, _) => true,
-                _ => false,
-            })
 }
 
 fn save_evidence(

@@ -73,6 +73,18 @@ pub(crate) fn write_text(report: &ReportV1, mut out: impl Write) -> io::Result<(
         Some(paths) => writeln!(out, " ({} forward migrations selected).", paths.len())?,
         None => writeln!(out, " (forward selection unresolved).")?,
     }
+    if let Some(catalog) = report.catalog_context() {
+        let coverage = match catalog.coverage {
+            CoverageStatus::Complete => "complete",
+            CoverageStatus::Incomplete => "incomplete",
+        };
+        writeln!(
+            out,
+            "Catalog coverage is {coverage} for {}. Artifact SHA-256 {}",
+            catalog.observation.target_id.as_str(),
+            catalog.artifact_digest
+        )?;
+    }
     if let Some(decision) = report.decision() {
         let status = match decision.status {
             DecisionStatus::Pass => "passed",

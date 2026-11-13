@@ -9,6 +9,7 @@ use thiserror::Error;
 
 use crate::{
     coverage::{Coverage, CoverageGap},
+    inspection::CatalogContextV1,
     migration::MigrationPlan,
     policy::{PolicyAuditV1, PolicyDecision},
     risk::{Finding, RelationLockObservation, Severity},
@@ -30,6 +31,8 @@ pub struct ReportV1 {
     decision: Option<PolicyDecision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     policy_audit: Option<PolicyAuditV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    catalog_context: Option<CatalogContextV1>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     relation_locks: Vec<RelationLockObservation>,
 }
@@ -67,6 +70,7 @@ impl ReportV1 {
             findings,
             decision,
             policy_audit: None,
+            catalog_context: None,
             relation_locks: Vec::new(),
         }
     }
@@ -80,6 +84,11 @@ impl ReportV1 {
 
     pub fn with_policy_audit(mut self, audit: Option<PolicyAuditV1>) -> Self {
         self.policy_audit = audit;
+        self
+    }
+
+    pub fn with_catalog_context(mut self, context: Option<CatalogContextV1>) -> Self {
+        self.catalog_context = context;
         self
     }
 
@@ -113,6 +122,10 @@ impl ReportV1 {
 
     pub fn policy_audit(&self) -> Option<&PolicyAuditV1> {
         self.policy_audit.as_ref()
+    }
+
+    pub fn catalog_context(&self) -> Option<&CatalogContextV1> {
+        self.catalog_context.as_ref()
     }
 
     pub fn relation_locks(&self) -> &[RelationLockObservation] {

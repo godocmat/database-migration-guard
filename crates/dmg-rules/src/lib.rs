@@ -3,6 +3,8 @@
 
 use dmg_core::{
     coverage::Coverage,
+    digest::ContentDigest,
+    inspection::InspectionEvidenceV1,
     risk::{Finding, RuleId},
     target::PostgresTarget,
 };
@@ -10,6 +12,7 @@ use dmg_postgres::ParsedPlan;
 
 pub use dmg_core::risk::{RelationLock, RelationLockObservation};
 
+mod catalog_context;
 mod ddl;
 mod dml;
 mod finding;
@@ -74,4 +77,23 @@ pub fn analyze(plan: &ParsedPlan, target: PostgresTarget, options: &RuleOptions)
         findings,
         locks,
     }
+}
+
+/// Analyze migrations with positive observations from an authenticated target catalog.
+pub fn analyze_with_catalog(
+    plan: &ParsedPlan,
+    target: PostgresTarget,
+    options: &RuleOptions,
+    evidence: &InspectionEvidenceV1,
+    digest: ContentDigest,
+) -> Analysis {
+    let mut analysis = analyze(plan, target, options);
+    if evidence
+        .observation()
+        .server_version_num
+        .is_some_and(|version| version / 10_000 == u32::from(target.major()))
+    {
+        catalog_context::add_catalog_context(&mut analysis, plan, evidence, digest);
+    }
+    analysis
 }
