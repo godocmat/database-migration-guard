@@ -5,6 +5,7 @@ mod git;
 mod goose;
 mod integrity;
 mod manifest;
+mod native_history;
 mod sqlx;
 mod supabase;
 mod worktree;
@@ -12,6 +13,9 @@ mod worktree;
 pub use dmg_core::migration::FlywaySettings;
 pub use git::GitRevisions;
 pub use manifest::{ManifestError, compare_integrity_manifest, reconcile_applied_manifest};
+pub use native_history::{
+    NativeHistoryError, NativeHistoryReconciliation, reconcile_native_history,
+};
 pub use sqlx::SqlxLayout;
 
 use std::{

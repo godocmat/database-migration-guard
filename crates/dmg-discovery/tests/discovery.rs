@@ -569,6 +569,8 @@ fn commit(repo: &Path, message: &str) -> String {
 
 #[path = "discovery/flyway.rs"]
 mod flyway;
+#[path = "discovery/native_history.rs"]
+mod native_history;
 
 #[test]
 fn integrity_and_applied_manifests_classify_independent_evidence() {
