@@ -15,6 +15,7 @@ clap = { version = "4.6", features = ["derive"] }
 dmg-core = { path = "../dmg-core" }
 dmg-discovery = { path = "../dmg-discovery" }
 dmg-postgres = { path = "../dmg-postgres" }
+dmg-report = { path = "../dmg-report" }
 dmg-rules = { path = "../dmg-rules" }
 serde.workspace = true
 serde_json.workspace = true

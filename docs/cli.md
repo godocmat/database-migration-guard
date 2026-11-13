@@ -70,3 +70,12 @@ severity = "medium"
 A scan can succeed with high or critical findings. A check validates invocation and configuration first, checks required coverage and evidence second, and applies policy thresholds and integrity outcomes last. The `[exit_codes]` project table can override `denied` and `incomplete`. Supply distinct integers from 1 through 125 and leave 2 reserved for invalid input. JSON decision statuses stay `pass`, `denied`, and `incomplete`.
 
 Text and JSON reports go to stdout unless `--output` is supplied. Fatal diagnostics go to stderr. Both denied and incomplete analyses still emit their report. A file report replaces its destination atomically after rendering succeeds. An invalid invocation or configuration leaves an existing report in place. Findings include repository-relative source coordinates and explanations. Reports omit migration SQL text and include the original policy SHA-256 for checks. [Report schema and source coordinates](../DECISIONS.md)
+
+## Review formats
+
+Render a saved version 1 JSON report as a Markdown summary or GitHub Actions annotations. Both formats bound their output and escape report-supplied content. Rendering returns success when the requested output is written. Use the original `dmg check` status for the gate decision.
+
+```sh
+dmg report --input report.json --format markdown --output summary.md
+dmg report --input report.json --format github
+```

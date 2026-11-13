@@ -21,6 +21,60 @@ transaction = "file"
 const POLICY: &str = "schema_version = 1\n";
 
 #[test]
+fn renders_a_denied_saved_report_without_replacing_the_gate_status() {
+    let project = Fixture::new();
+    project.write(
+        "migrations/002_update.sql",
+        "UPDATE public.items SET id = 7;\n",
+    );
+    let check = project.run(&[
+        "check",
+        "--policy",
+        "policy.toml",
+        "--format",
+        "json",
+        "--output",
+        "report.json",
+    ]);
+    assert_exit(&check, 1);
+    let markdown = project.run(&[
+        "report",
+        "--input",
+        "report.json",
+        "--format",
+        "markdown",
+        "--output",
+        "summary.md",
+    ]);
+    assert_exit(&markdown, 0);
+    assert!(markdown.stdout.is_empty());
+    let summary = fs::read_to_string(project.path("summary.md")).unwrap();
+    assert!(summary.contains("PG006"));
+    let annotations = project.run(&["report", "--input", "report.json", "--format", "github"]);
+    assert_exit(&annotations, 0);
+    let annotations = String::from_utf8(annotations.stdout).unwrap();
+    assert!(annotations.contains("::error "));
+    assert!(annotations.contains("migrations/002_update.sql"));
+    assert_eq!(project.read_report()["decision"]["status"], "denied");
+
+    project.write("bad-report.json", r#"{"schema_version":9}"#);
+    let invalid = project.run(&[
+        "report",
+        "--input",
+        "bad-report.json",
+        "--format",
+        "markdown",
+        "--output",
+        "summary.md",
+    ]);
+    assert_exit(&invalid, 2);
+    assert_eq!(
+        fs::read_to_string(project.path("summary.md")).unwrap(),
+        summary
+    );
+}
+
+#[test]
 fn init_preserves_an_existing_file_and_writes_usable_config() {
     let project = Fixture::new();
     assert_exit(
