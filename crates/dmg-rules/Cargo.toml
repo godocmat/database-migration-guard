@@ -12,3 +12,5 @@ dmg-postgres = { path = "../dmg-postgres" }
 
 [dev-dependencies]
 dmg-discovery = { path = "../dmg-discovery" }
+serde.workspace = true
+serde_json.workspace = true
