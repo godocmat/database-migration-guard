@@ -11,6 +11,7 @@ use dmg_core::{coverage::CoverageGapKind, source::RepoPath};
 
 use crate::{
     DiscoveryOptions, Inventory, budget_for_file, coverage_gap, record_candidate, sorted_entries,
+    valid_path,
 };
 
 pub(super) fn collect(repository: &Path, options: &DiscoveryOptions, inventory: &mut Inventory) {
@@ -106,7 +107,10 @@ fn collect_file(
     if metadata.as_ref().is_ok_and(cap_std::fs::Metadata::is_dir) {
         return;
     }
-    let Ok(path) = RepoPath::new(format!("{root}/{filename}")) else {
+    let Some(path) = RepoPath::new(format!("{root}/{filename}"))
+        .ok()
+        .filter(valid_path)
+    else {
         inventory.gaps.push(coverage_gap(
             CoverageGapKind::InvalidPath,
             Some(root),

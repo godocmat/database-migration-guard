@@ -1,8 +1,13 @@
 //! Discover migration files and retain the source bytes used by the plan.
 
+mod git;
+mod integrity;
+mod manifest;
 mod sqlx;
 mod worktree;
 
+pub use git::GitRevisions;
+pub use manifest::{ManifestError, compare_integrity_manifest, reconcile_applied_manifest};
 pub use sqlx::SqlxLayout;
 
 use std::{
@@ -14,8 +19,8 @@ use dmg_core::{
     coverage::{Coverage, CoverageGap, CoverageGapKind, DiagnosticScope},
     digest::ContentDigest,
     migration::{
-        ExecutionMode, MigrationAdapter, MigrationDirection, MigrationFile, MigrationIdentity,
-        MigrationPlan,
+        ExecutionMode, IntegrityBasis, MigrationAdapter, MigrationDirection, MigrationFile,
+        MigrationIdentity, MigrationPlan,
     },
     source::{ByteRange, RepoPath},
 };
@@ -26,7 +31,53 @@ use thiserror::Error;
 pub fn discover_worktree(repository: &Path, options: &DiscoveryOptions) -> Discovery {
     let mut inventory = Inventory::default();
     worktree::collect(repository, options, &mut inventory);
-    inventory.finish()
+    inventory.finish(options)
+}
+
+/// Compare explicit local commits and load the candidate sources from raw Git blobs.
+pub fn discover_git(
+    repository: &Path,
+    revisions: &GitRevisions,
+    options: &DiscoveryOptions,
+) -> Discovery {
+    let baseline = git::collect(repository, &revisions.base, "base", options).finish(options);
+    let mut head = git::collect(repository, &revisions.head, "head", options).finish(options);
+    if baseline.plan.coverage.gaps().is_empty() && head.plan.coverage.gaps().is_empty() {
+        let basis = IntegrityBasis::Git {
+            base_commit: revisions.base.clone(),
+            head_commit: revisions.head.clone(),
+        };
+        let comparison = integrity::compare(
+            basis,
+            integrity::file_digests(&baseline.plan.inventory),
+            &head.plan.inventory,
+        );
+        head.plan.selected_forwards = Some(integrity::select_changed(&comparison));
+        head.plan.integrity = Some(comparison);
+    } else {
+        let gaps = head
+            .plan
+            .coverage
+            .gaps()
+            .iter()
+            .cloned()
+            .chain(
+                baseline
+                    .plan
+                    .coverage
+                    .gaps()
+                    .iter()
+                    .cloned()
+                    .map(|mut gap| {
+                        gap.message = format!("Git base: {}", gap.message);
+                        gap
+                    }),
+            )
+            .collect();
+        head.plan.coverage = Coverage::from_gaps(gaps);
+        head.plan.selected_forwards = None;
+    }
+    head
 }
 
 /// The reportable plan and its original source inputs.
@@ -34,6 +85,8 @@ pub fn discover_worktree(repository: &Path, options: &DiscoveryOptions) -> Disco
 pub struct Discovery {
     pub plan: MigrationPlan,
     sources: BTreeMap<RepoPath, Vec<u8>>,
+    head_complete: bool,
+    options: DiscoveryOptions,
 }
 
 impl Discovery {
@@ -59,7 +112,7 @@ impl DiscoveryOptions {
         adapter: Adapter,
         limits: DiscoveryLimits,
     ) -> Result<Self, DiscoveryConfigError> {
-        if roots.is_empty() || roots.iter().any(|path| !valid_root(path)) {
+        if roots.is_empty() || roots.iter().any(|path| !valid_path(path)) {
             return Err(DiscoveryConfigError::InvalidRoots);
         }
         roots.sort();
@@ -81,7 +134,7 @@ impl DiscoveryOptions {
     }
 }
 
-fn valid_root(path: &RepoPath) -> bool {
+fn valid_path(path: &RepoPath) -> bool {
     path.as_str().len() <= 1024
         && path.as_str().split('/').all(|part| {
             !part.eq_ignore_ascii_case(".git")
@@ -115,6 +168,8 @@ pub enum DiscoveryConfigError {
     InvalidRoots,
     #[error("invalid migration entry or byte limits")]
     InvalidLimits,
+    #[error("Git base and head must be full commit IDs of the same hash format")]
+    InvalidGitRevisions,
     #[error("plain SQL filename pattern must have one capture for the version")]
     InvalidVersionCapture,
     #[error("plain SQL filename pattern must fit within 1024 bytes")]
@@ -204,6 +259,13 @@ struct Candidate {
 }
 
 impl Adapter {
+    fn kind(&self) -> MigrationAdapter {
+        match self {
+            Self::Plain(_) => MigrationAdapter::Plain,
+            Self::Sqlx(_) => MigrationAdapter::Sqlx,
+        }
+    }
+
     fn candidate(&self, filename: &str) -> Result<Option<Candidate>, &'static str> {
         let plain = match self {
             Self::Plain(plain) => plain,
@@ -263,7 +325,7 @@ impl Inventory {
         self.sources.insert(path, bytes);
     }
 
-    fn finish(mut self) -> Discovery {
+    fn finish(mut self, options: &DiscoveryOptions) -> Discovery {
         self.files.sort_by(|left, right| {
             (&left.identity, left.direction, &left.path).cmp(&(
                 &right.identity,
@@ -286,7 +348,7 @@ impl Inventory {
                 });
             }
         }
-        sqlx::validate_pairs(&self.files, &mut self.gaps);
+        sqlx::validate_pairs(&options.adapter, &self.files, &mut self.gaps);
         let selected_forwards = self.gaps.is_empty().then(|| {
             self.files
                 .iter()
@@ -295,6 +357,8 @@ impl Inventory {
                 .collect()
         });
         Discovery {
+            head_complete: self.gaps.is_empty(),
+            options: options.clone(),
             plan: MigrationPlan {
                 inventory: self.files,
                 selected_forwards,

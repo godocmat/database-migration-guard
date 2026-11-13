@@ -11,4 +11,6 @@ cap-fs-ext = "4.0"
 cap-std = "4.0"
 dmg-core = { path = "../dmg-core" }
 regex = "1.13"
+serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
