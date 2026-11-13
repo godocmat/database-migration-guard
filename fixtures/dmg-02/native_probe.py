@@ -23,10 +23,14 @@ PORT = 5432
 ERROR = re.compile(r"ERROR:\s+([A-Z0-9]{5}): ([^\n]+)")
 
 
-def execute(program, *args, cwd=None, check=True):
+def command_env():
     env = {k: v for k, v in os.environ.items() if not k.startswith(("PG", "DATABASE_URL"))}
     env.update(LC_ALL="C", PGCLIENTENCODING="UTF8", PGCONNECT_TIMEOUT="5")
-    result = subprocess.run([str(program), *args], cwd=cwd, env=env, capture_output=True,
+    return env
+
+
+def execute(program, *args, cwd=None, check=True):
+    result = subprocess.run([str(program), *args], cwd=cwd, env=command_env(), capture_output=True,
                             text=True, encoding="utf-8", timeout=30)
     require(not check or result.returncode == 0,
             f"{Path(program).name} failed with {result.returncode}\n{result.stdout}{result.stderr}")
@@ -57,10 +61,13 @@ class Cluster:
             if (data / "postmaster.pid").exists():
                 execute(self.bin / "pg_ctl", "-D", str(data), "-w", "-t", "15", "-m", "immediate", "stop")
 
+    def psql_command(self, database, *args):
+        return [self.bin / "psql", "-X", "--no-password", "-h", str(self.directory),
+                "-p", str(PORT), "-U", USER, "-d", database, "-v", "ON_ERROR_STOP=1",
+                "-v", "VERBOSITY=verbose", *args]
+
     def psql(self, database, *args, cwd=None, check=True):
-        return execute(self.bin / "psql", "-X", "--no-password", "-h", str(self.directory),
-                       "-p", str(PORT), "-U", USER, "-d", database, "-v", "ON_ERROR_STOP=1",
-                       "-v", "VERBOSITY=verbose", *args, cwd=cwd, check=check)
+        return execute(*self.psql_command(database, *args), cwd=cwd, check=check)
 
     def query(self, database, sql):
         return self.psql(database, "-At", "-c", sql).stdout.strip()

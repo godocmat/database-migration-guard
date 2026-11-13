@@ -37,4 +37,27 @@ python3 -B fixtures/dmg-02/native_probe.py --pg-bin /path/to/postgresql-17.12/bi
 python3 -B fixtures/dmg-02/native_probe.py --pg-bin /path/to/postgresql-18.7/bin --sqlx /path/to/sqlx
 ```
 
-Remaining runtime work includes two-session lock probes, the other rule cases listed in the handoff, broader schema-only and image-pinned matrix coverage, and the later applied-history and Guard rehearsal cases. Independent holdout selection, labeling, freeze, and competitor comparison remain pending.
+## Two-session relation locks
+
+On 13 November 2026, the [lock probe](../lock_probe.py) ran five clean-seed cases per major in fresh PostgreSQL databases. It used Linux amd64 PostgreSQL and psql binaries from the Docker Official Images listed below. The image filesystems ran in separate WSL2 chroots with isolated network and IPC namespaces, a private Unix socket directory, and Alpine Python 3.14.10. The probe holds the candidate DDL open in one transaction and observes its granted locks from a second connection. The second session also attempts an INSERT with a 500 ms lock timeout. Successful writes roll back. [PostgreSQL 17 locking](https://www.postgresql.org/docs/17/explicit-locking.html) · [PostgreSQL 18 locking](https://www.postgresql.org/docs/18/explicit-locking.html) · [Docker Official PostgreSQL image](https://hub.docker.com/_/postgres)
+
+| Image | Linux amd64 manifest digest | Observations |
+| --- | --- | --- |
+| postgres:17.12-alpine | sha256:005c5c37db96c1e6652a79ea31f9886402fba81ac95dc2db897739121dd7f8f2 | [Five runs](locks-17.12.jsonl) |
+| postgres:18.7-alpine | sha256:fa1b61f5a4844f4d4b73c9b15716cfc75fe70c931f2d32723630f3b900056366 | [Five runs](locks-18.7.jsonl) |
+
+| Case | Relation locks and concurrent write |
+| --- | --- |
+| R04a and R04b | Both SET NOT NULL variants held ACCESS EXCLUSIVE on app.accounts and the concurrent write returned 55P03. This probe measures the locks held after the DDL completes. The retained CHECK can avoid the scan while keeping the same lock mode. |
+| R04c | CHECK validation held SHARE UPDATE EXCLUSIVE on app.accounts. The concurrent write succeeded. |
+| R05 | The regular index build held SHARE on app.accounts and the concurrent write returned 55P03. |
+| V02 | PostgreSQL 17 rejected the DDL with 42809. PostgreSQL 18 held SHARE ROW EXCLUSIVE on app.accounts, app.events, and its child. Inserts into either app.accounts or app.events returned 55P03. |
+
+From the repository root on a Unix host, run the probe as a regular user with the pinned PostgreSQL binaries. The script prints JSON Lines, including binary and fixture digests, after removing the temporary cluster. For an image run, use the recorded amd64 digest, add Python 3 to the disposable Alpine environment, and run as the postgres user with a writable /tmp.
+
+```sh
+python3 -B fixtures/dmg-02/lock_probe.py --pg-bin /path/to/postgresql-17.12/bin
+python3 -B fixtures/dmg-02/lock_probe.py --pg-bin /path/to/postgresql-18.7/bin
+```
+
+Remaining runtime work includes the other rule cases listed in the handoff, broader schema-only and image-pinned matrix coverage, and the later applied-history and Guard rehearsal cases. Independent holdout selection, labeling, freeze, and competitor comparison remain pending.

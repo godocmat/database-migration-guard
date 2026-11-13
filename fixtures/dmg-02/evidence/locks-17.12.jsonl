@@ -1,0 +1,6 @@
+{"psql": "psql (PostgreSQL) 17.12", "runs": 5, "server_version": "17.12", "sha256": {"input_digests": "bab478e4ebe0cb86b6f768e7534c8449ced57f2fd3c91011e675243aac4a65a6", "manifest": "8f7bb9d58436cdd44713d8aec18ba5dc29850a1d8e8975bebedb721f6fbebd74", "postgres": "0d21e79710dd311f8ae671c0a4cda5b622652dfe7ddc624a019590c59a694c93", "psql": "620190c4a5f484e8533493e51d031940e9f1e048cc5ee272708248cf89b336be"}}
+{"id": "R04a/scan/plain/pg17", "migration_sqlstate": null, "relation_locks": [["app.accounts", "AccessExclusiveLock"]], "source": "inputs/set-email-not-null.sql", "writer_sqlstate": {"app.accounts": "55P03"}}
+{"id": "R04b/validated-proof/plain/pg17", "migration_sqlstate": null, "relation_locks": [["app.accounts", "AccessExclusiveLock"]], "source": "inputs/set-email-not-null.sql", "writer_sqlstate": {"app.accounts": "55P03"}}
+{"id": "R04c/validate-check/plain/pg17", "migration_sqlstate": null, "relation_locks": [["app.accounts", "ShareUpdateExclusiveLock"]], "source": "inputs/validate-email.sql", "writer_sqlstate": {"app.accounts": null}}
+{"id": "R05/regular-index/plain/pg17", "migration_sqlstate": null, "relation_locks": [["app.accounts", "ShareLock"]], "source": "inputs/index-legacy.sql", "writer_sqlstate": {"app.accounts": "55P03"}}
+{"id": "V02/same-bytes/plain/pg17", "migration_sqlstate": "42809", "source": "inputs/partitioned-fk.sql"}
