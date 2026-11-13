@@ -1,6 +1,9 @@
 //! Discover migration files and retain the source bytes used by the plan.
 
+mod sqlx;
 mod worktree;
+
+pub use sqlx::SqlxLayout;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -123,6 +126,7 @@ pub enum DiscoveryConfigError {
 #[derive(Debug, Clone)]
 pub enum Adapter {
     Plain(PlainSql),
+    Sqlx(SqlxLayout),
 }
 
 #[derive(Debug, Clone)]
@@ -201,7 +205,10 @@ struct Candidate {
 
 impl Adapter {
     fn candidate(&self, filename: &str) -> Result<Option<Candidate>, &'static str> {
-        let Self::Plain(plain) = self;
+        let plain = match self {
+            Self::Plain(plain) => plain,
+            Self::Sqlx(layout) => return layout.candidate(filename),
+        };
         let Some(captures) = plain.filename_pattern.captures(filename) else {
             return Ok(None);
         };
@@ -231,13 +238,26 @@ struct Inventory {
 impl Inventory {
     fn add(&mut self, candidate: Candidate, path: RepoPath, bytes: Vec<u8>) {
         let source_segment = ByteRange::new(0, bytes.len()).expect("file offsets start at zero");
+        let is_sqlx = candidate.identity.adapter == MigrationAdapter::Sqlx;
+        let execution = if is_sqlx {
+            sqlx::execution(&bytes)
+        } else {
+            candidate.execution
+        };
+        if is_sqlx && std::str::from_utf8(&bytes).is_err() {
+            self.gaps.push(coverage_gap(
+                CoverageGapKind::UnsupportedInput,
+                Some(&path),
+                "SQLx requires migration files to contain UTF-8",
+            ));
+        }
         self.files.push(MigrationFile {
             identity: candidate.identity,
             direction: candidate.direction,
             digest: ContentDigest::of(&bytes),
             path: path.clone(),
             source_segments: vec![source_segment],
-            execution: candidate.execution,
+            execution,
         });
         self.bytes_read += bytes.len();
         self.sources.insert(path, bytes);
@@ -266,6 +286,7 @@ impl Inventory {
                 });
             }
         }
+        sqlx::validate_pairs(&self.files, &mut self.gaps);
         let selected_forwards = self.gaps.is_empty().then(|| {
             self.files
                 .iter()

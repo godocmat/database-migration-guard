@@ -156,3 +156,60 @@ fn symlink_migration_is_a_gap() {
         CoverageGapKind::InvalidPath
     );
 }
+
+#[test]
+fn sqlx_simple_uses_the_native_byte_zero_transaction_directive() {
+    let repo = TestRepo::new().unwrap();
+    let one = b"-- no-transaction\r\nSELECT 1;\r\nSELECT 2;\r\n";
+    let two = b"\n-- no-transaction\nSELECT 3;\n";
+    repo.write("migrations/01_a.sql", one);
+    repo.write("migrations/2_b.sql", two);
+    let discovery = discover_worktree(&repo.0, &sqlx(dmg_discovery::SqlxLayout::Simple));
+    assert_eq!(discovery.plan.coverage.status(), CoverageStatus::Complete);
+    let files = &discovery.plan.inventory;
+    assert_eq!(files[0].execution, ExecutionMode::SQLX_NO_TRANSACTION);
+    assert_eq!(files[1].execution, ExecutionMode::SQLX_TRANSACTION);
+    assert_eq!(files[0].source_segments[0].as_range(), 0..one.len());
+    assert_eq!(discovery.source_bytes(&files[0].path), Some(one.as_slice()));
+}
+
+#[test]
+fn sqlx_reversible_requires_a_pair_and_selects_only_up() {
+    use dmg_core::migration::MigrationDirection;
+    let repo = TestRepo::new().unwrap();
+    let options = sqlx(dmg_discovery::SqlxLayout::Reversible);
+    repo.write("migrations/002_a.up.sql", b"SELECT 1;");
+    repo.write("migrations/2_a.down.sql", b"SELECT 2;");
+    let discovery = discover_worktree(&repo.0, &options);
+    assert_eq!(discovery.plan.coverage.status(), CoverageStatus::Complete);
+    assert_eq!(discovery.plan.inventory.len(), 2);
+    assert_eq!(
+        discovery.plan.inventory[1].direction,
+        MigrationDirection::Down
+    );
+    assert_eq!(
+        discovery.plan.selected_forwards.unwrap(),
+        [discovery.plan.inventory[0].path.clone()]
+    );
+
+    fs::rename(
+        repo.0.join("migrations/2_a.down.sql"),
+        repo.0.join("migrations/2_b.down.sql"),
+    )
+    .unwrap();
+    let discovery = discover_worktree(&repo.0, &options);
+    assert!(discovery.plan.selected_forwards.is_none());
+    let gaps = discovery.plan.coverage.gaps();
+    assert_eq!(gaps.len(), 1);
+    assert_eq!(gaps[0].kind, CoverageGapKind::UnpairedMigration);
+    assert_eq!(gaps[0].related_paths.len(), 2);
+}
+
+fn sqlx(layout: dmg_discovery::SqlxLayout) -> DiscoveryOptions {
+    DiscoveryOptions::new(
+        vec![RepoPath::new("migrations").unwrap()],
+        Adapter::Sqlx(layout),
+        DiscoveryLimits::default(),
+    )
+    .unwrap()
+}
