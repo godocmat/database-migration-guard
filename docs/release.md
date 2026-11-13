@@ -55,7 +55,7 @@ python3 -B integrations/github/tests/replay.py --binary "$INSTALLED_DMG"
 python3 -B integrations/gitlab/tests/replay.py --binary "$INSTALLED_DMG"
 ~~~
 
-For an upgrade test, keep the previous verified executable and its exact Git, policy, and evidence pins. Run the same smoke test with both versions and check any expected rule changes in the release notes before updating a protected workflow. Update the binary and checksum together. For a rollback, restore the prior executable and its exact pins from the previous verified release and re-run the gate on the current reviewed revisions.
+For an upgrade test, keep the previous verified executable and its exact Git, policy, and evidence pins. Replay the protected check on both binaries and smoke test the new candidate. Check expected rule changes in the release notes before updating a protected workflow. The GitHub replay works with the earlier pilot package as well. Update the binary and checksum together. For a rollback, restore the prior executable and its exact pins from the previous verified release and re-run the gate on the current reviewed revisions.
 
 ## Linux x86-64 CLI container
 
@@ -101,6 +101,12 @@ gh attestation verify "oci://$IMAGE_REF_BY_DIGEST" --repo "$RELEASE_REPO" \
 ~~~
 
 Verify the SBOM attestation's predicate type and confirm that its document matches the package SBOM. Use the attested package.json digest for local package verification. Verify downloads before installation or use in CI. [GitHub CLI verification options](https://cli.github.com/manual/gh_attestation_verify)
+
+### Local Windows staging evidence
+
+Two native stages of revision `ae83f53227ad02ad20c1b7e0dcdb090192574c75` used separate tracked source extractions and build directories on the same Windows 11 x86-64 host. They used Rust 1.100.0, MSVC 19.44.35230, Windows SDK 10.0.26100.0, libclang 21.1.8 and the same locked dependency cache. Both produced a 13,603,328-byte executable with SHA-256 `002a0b0e83f3249c7d93861b9dfbcc1b25daa7fdfec6d3b8f108d21cee35e149` and a CycloneDX 1.5 SBOM with SHA-256 `8a3ce5b54c5074236744a31381406f2efd429129a9be7b63001597d6e8de913c`. The second stage recorded the SBOM generator hash in the manifest. This evidence covers one matched build environment.
+
+The package pin and the official CycloneDX 1.5 schema validated. The installed-path smoke check passed 0, 1 and 3 gate outcomes and saved-report rendering with the host's installed Git and Visual C++ runtime. The verifier rejected an incorrect package manifest pin, changed checksums, and changed binary and SBOM bytes. A clean disconnected installation remains an acceptance item.
 
 ## Acceptance matrix
 
