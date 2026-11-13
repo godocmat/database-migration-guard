@@ -163,6 +163,7 @@ pub struct Constraint {
     pub kind: ConstraintKind,
     pub not_valid: bool,
     pub enforced: bool,
+    pub no_inherit: bool,
     pub deferrable: bool,
     pub initially_deferred: bool,
 }
@@ -184,6 +185,7 @@ pub enum ConstraintKind {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Rename {
+    pub action_span: SourceSpan,
     /// For a member, this identifies its parent relation.
     pub object: RelationName,
     pub kind: ObjectKind,
