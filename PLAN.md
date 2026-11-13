@@ -319,7 +319,9 @@ DMG-08 local implementation is integrated. The Windows x64 and Ubuntu 24.04 x64 
 
 DMG-09 is integrated for the documented SQL profiles. The CLI supports Flyway OSS 13.12.2 versioned and repeatable migrations, Goose 3.30.1 combined Up and Down files, and Supabase CLI 3.0.0 lexical versions. Native probes on PostgreSQL 17.12 and 18.7 establish supported ordering and transaction behavior. The adapters preserve original file digests and report incomplete coverage when runner settings or SQL prevent reliable analysis. [Migration formats and coverage](docs/migration-formats.md) · [Shared contract](DECISIONS.md#dmg-09-adapter-contracts)
 
-DMG-10 has versioned inspection evidence, bounded TLS transport, and native history reconciliation. The authorized scope and role probes covered PostgreSQL 15.20, 16.16, 17.12, and 18.7. Catalog collection and native history extraction have separate implementation assignments. [Inspection verification status](PROGRESS.md#dmg-10-inspection-and-native-history)
+DMG-10 has versioned inspection evidence, a bounded TLS catalog collector, and native history reconciliation. The Rust collector passed restricted-role TLS fixtures on PostgreSQL 15.20, 16.16, 17.12, and 18.7. The native history reader and CLI integration are pending. [Inspection verification status](PROGRESS.md#dmg-10-inspection-and-native-history)
+
+DMG-11 structural comparison is integrated. Expected-to-current and current-to-target comparisons retain partial coverage and require a reviewed mapping for renames. Application contract evaluation and live snapshot workflow verification are pending. [Schema comparison](docs/diff.md)
 
 ## 19. Risk register
 
