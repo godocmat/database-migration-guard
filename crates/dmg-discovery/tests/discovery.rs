@@ -213,3 +213,276 @@ fn sqlx(layout: dmg_discovery::SqlxLayout) -> DiscoveryOptions {
     )
     .unwrap()
 }
+
+#[test]
+fn git_compares_raw_bytes_and_keeps_unchanged_head_sources() {
+    use dmg_core::migration::IntegrityStatus::{Missing, Modified, New, Unchanged};
+    let repo = TestRepo::new().unwrap();
+    init_git(&repo.0);
+    let first = b"-- base\nSELECT 1;\n";
+    repo.write("migrations/01_first.sql", first);
+    repo.write("migrations/02_second.sql", b"SELECT 2;\n");
+    repo.write("migrations/03_third.sql", b"SELECT 3;\n");
+    repo.write("migrations/04_fourth.sql", b"SELECT 4;\n");
+    let base = commit(&repo.0, "base");
+
+    let changed = b"-- base\r\nSELECT 1;\r\n";
+    repo.write("migrations/01_first.sql", changed);
+    fs::rename(
+        repo.0.join("migrations/02_second.sql"),
+        repo.0.join("migrations/2_renamed.sql"),
+    )
+    .unwrap();
+    fs::rename(
+        repo.0.join("migrations/03_third.sql"),
+        repo.0.join("migrations/5_moved.sql"),
+    )
+    .unwrap();
+    let head = commit(&repo.0, "candidate");
+    repo.write("migrations/01_first.sql", b"SELECT 999;");
+    repo.write("migrations/9_untracked.sql", b"SELECT 999;");
+    git(&repo.0, &["replace", &head, &base]);
+
+    let revisions = dmg_discovery::GitRevisions::new(&base, &head).unwrap();
+    let discovery =
+        dmg_discovery::discover_git(&repo.0, &revisions, &plain(DiscoveryLimits::default()));
+    assert_eq!(discovery.plan.coverage.status(), CoverageStatus::Complete);
+    let comparison = discovery.plan.integrity.as_ref().unwrap();
+    assert_eq!(
+        comparison
+            .changes
+            .iter()
+            .map(|row| row.status)
+            .collect::<Vec<_>>(),
+        [Modified, Unchanged, Missing, Unchanged, New]
+    );
+    let moved = &comparison.changes[1];
+    assert_ne!(
+        moved.before.as_ref().unwrap().path,
+        moved.after.as_ref().unwrap().path
+    );
+    assert_eq!(
+        discovery.source_bytes(&RepoPath::new("migrations/01_first.sql").unwrap()),
+        Some(changed.as_slice())
+    );
+    assert_eq!(
+        discovery.source(&RepoPath::new("migrations/04_fourth.sql").unwrap()),
+        Some("SELECT 4;\n")
+    );
+    assert_eq!(
+        discovery
+            .plan
+            .selected_forwards
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(RepoPath::as_str)
+            .collect::<Vec<_>>(),
+        [
+            "migrations/01_first.sql",
+            "migrations/2_renamed.sql",
+            "migrations/5_moved.sql"
+        ]
+    );
+    assert!(discovery.plan.applied_history.is_none());
+}
+
+#[test]
+fn unavailable_or_noncommit_base_preserves_explicit_head_inventory() {
+    let repo = TestRepo::new().unwrap();
+    init_git(&repo.0);
+    let sql = b"SELECT 1;\n";
+    repo.write("migrations/1_first.sql", sql);
+    let head = commit(&repo.0, "candidate");
+    let blob = git(&repo.0, &["rev-parse", "HEAD:migrations/1_first.sql"]);
+    for base in ["0".repeat(40), blob] {
+        let revisions = dmg_discovery::GitRevisions::new(&base, &head).unwrap();
+        let discovery =
+            dmg_discovery::discover_git(&repo.0, &revisions, &plain(DiscoveryLimits::default()));
+        assert!(discovery.plan.selected_forwards.is_none());
+        assert!(discovery.plan.integrity.is_none());
+        assert_eq!(
+            discovery.plan.coverage.gaps()[0].kind,
+            CoverageGapKind::MissingIntegrityEvidence
+        );
+        let file = &discovery.plan.inventory[0];
+        assert_eq!(discovery.source_bytes(&file.path), Some(sql.as_slice()));
+    }
+}
+
+fn git(repo: &Path, args: &[&str]) -> String {
+    let mut command = std::process::Command::new("git");
+    for (key, _) in std::env::vars_os() {
+        if key
+            .to_string_lossy()
+            .to_ascii_uppercase()
+            .starts_with("GIT_")
+        {
+            command.env_remove(key);
+        }
+    }
+    let output = command
+        .current_dir(repo)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env(
+            "GIT_CONFIG_GLOBAL",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        )
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap().trim().into()
+}
+
+fn init_git(repo: &Path) {
+    git(repo, &["init", "--quiet", "--object-format=sha1"]);
+    git(repo, &["config", "user.name", "DMG Fixture"]);
+    git(repo, &["config", "user.email", "fixture@example.invalid"]);
+    git(repo, &["config", "core.autocrlf", "true"]);
+    fs::write(repo.join(".gitattributes"), "*.sql -text\n").unwrap();
+}
+
+fn commit(repo: &Path, message: &str) -> String {
+    git(repo, &["add", "--all"]);
+    git(repo, &["commit", "--quiet", "--no-gpg-sign", "-m", message]);
+    git(repo, &["rev-parse", "HEAD"])
+}
+
+#[test]
+fn integrity_and_applied_manifests_classify_independent_evidence() {
+    use dmg_core::migration::{AppliedStatus, IntegrityStatus};
+    let repo = TestRepo::new().unwrap();
+    let one = b"SELECT 1;";
+    let two = b"SELECT 2;";
+    let changed_two = b"SELECT 20;";
+    let three = b"SELECT 3;";
+    let four = b"SELECT 4;";
+    let five = b"SELECT 5;";
+    repo.write("migrations/1_a.sql", one);
+    repo.write("migrations/2_b.sql", changed_two);
+    repo.write("migrations/4_d.sql", four);
+    repo.write("migrations/5_e.sql", five);
+
+    let mut discovery = discover_worktree(&repo.0, &plain(DiscoveryLimits::default()));
+    assert!(discovery.plan.applied_history.is_none());
+    let baseline = serde_json::to_vec(&serde_json::json!({
+        "schema_version": 1,
+        "adapter": "plain",
+        "migrations": [
+            {"version": 1, "direction": "forward", "path": "migrations/1_a.sql", "sha256": ContentDigest::of(one)},
+            {"version": 2, "direction": "forward", "path": "migrations/2_b.sql", "sha256": ContentDigest::of(two)},
+            {"version": 3, "direction": "forward", "path": "migrations/3_c.sql", "sha256": ContentDigest::of(three)},
+        ],
+    })).unwrap();
+    let applied = serde_json::to_vec(&serde_json::json!({
+        "schema_version": 1,
+        "adapter": "plain",
+        "migrations": [
+            {"version": 1, "status": "applied", "sha256": ContentDigest::of(one)},
+            {"version": 2, "status": "applied", "sha256": ContentDigest::of(two)},
+            {"version": 3, "status": "applied", "sha256": ContentDigest::of(three)},
+            {"version": 5, "status": "failed", "sha256": ContentDigest::of(five)},
+        ],
+    }))
+    .unwrap();
+
+    let baseline_digest = ContentDigest::of(&baseline);
+    let applied_digest = ContentDigest::of(&applied);
+    assert!(matches!(
+        dmg_discovery::compare_integrity_manifest(&mut discovery, &baseline, applied_digest),
+        Err(dmg_discovery::ManifestError::DigestMismatch)
+    ));
+    assert!(discovery.plan.integrity.is_none());
+    dmg_discovery::compare_integrity_manifest(&mut discovery, &baseline, baseline_digest).unwrap();
+    assert!(discovery.plan.applied_history.is_none());
+    dmg_discovery::reconcile_applied_manifest(&mut discovery, &applied, applied_digest).unwrap();
+
+    let integrity = discovery.plan.integrity.as_ref().unwrap();
+    assert_eq!(
+        integrity
+            .changes
+            .iter()
+            .map(|row| row.status)
+            .collect::<Vec<_>>(),
+        [
+            IntegrityStatus::Unchanged,
+            IntegrityStatus::Modified,
+            IntegrityStatus::Missing,
+            IntegrityStatus::New,
+            IntegrityStatus::New,
+        ]
+    );
+    let history = discovery.plan.applied_history.as_ref().unwrap();
+    assert_eq!(
+        history
+            .migrations
+            .iter()
+            .map(|row| row.status)
+            .collect::<Vec<_>>(),
+        [
+            AppliedStatus::Applied,
+            AppliedStatus::Modified,
+            AppliedStatus::Missing,
+            AppliedStatus::Pending,
+            AppliedStatus::Failed,
+        ]
+    );
+}
+
+#[test]
+fn applied_history_can_be_verified_when_only_the_git_base_is_missing() {
+    let repo = TestRepo::new().unwrap();
+    init_git(&repo.0);
+    repo.write("migrations/1_first.sql", b"SELECT 1;");
+    let head = commit(&repo.0, "candidate");
+    let revisions = dmg_discovery::GitRevisions::new(&"0".repeat(40), &head).unwrap();
+    let mut discovery =
+        dmg_discovery::discover_git(&repo.0, &revisions, &plain(DiscoveryLimits::default()));
+    let applied = br#"{"schema_version":1,"adapter":"plain","migrations":[]}"#;
+    dmg_discovery::reconcile_applied_manifest(&mut discovery, applied, ContentDigest::of(applied))
+        .unwrap();
+    assert_eq!(
+        discovery.plan.applied_history.unwrap().migrations[0].status,
+        dmg_core::migration::AppliedStatus::Pending
+    );
+    assert_eq!(discovery.plan.coverage.status(), CoverageStatus::Incomplete);
+    assert!(discovery.plan.integrity.is_none());
+}
+
+#[test]
+fn reversible_integrity_manifest_requires_matching_directions() {
+    let repo = TestRepo::new().unwrap();
+    let content = b"SELECT 1;";
+    repo.write("migrations/1_a.up.sql", content);
+    repo.write("migrations/1_a.down.sql", content);
+    let mut discovery = discover_worktree(&repo.0, &sqlx(dmg_discovery::SqlxLayout::Reversible));
+    let mut baseline = serde_json::json!({
+        "schema_version": 1,
+        "adapter": "sqlx",
+        "migrations": [
+            {"version": 1, "direction": "forward", "path": "migrations/1_a.up.sql", "sha256": ContentDigest::of(content)},
+        ],
+    });
+    let bytes = serde_json::to_vec(&baseline).unwrap();
+    assert!(matches!(
+        dmg_discovery::compare_integrity_manifest(
+            &mut discovery,
+            &bytes,
+            ContentDigest::of(&bytes)
+        ),
+        Err(dmg_discovery::ManifestError::UnpairedMigration)
+    ));
+    baseline["migrations"].as_array_mut().unwrap().push(serde_json::json!({
+        "version": 1, "direction": "down", "path": "migrations/1_a.down.sql", "sha256": ContentDigest::of(content),
+    }));
+    let bytes = serde_json::to_vec(&baseline).unwrap();
+    dmg_discovery::compare_integrity_manifest(&mut discovery, &bytes, ContentDigest::of(&bytes))
+        .unwrap();
+    assert_eq!(discovery.plan.integrity.unwrap().changes.len(), 2);
+    assert_eq!(discovery.plan.selected_forwards, Some(Vec::new()));
+}
