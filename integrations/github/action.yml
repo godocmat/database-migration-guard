@@ -1,0 +1,41 @@
+name: Database Migration Guard pilot
+description: Check the exact GitHub pull request test merge against protected PostgreSQL migration policy.
+inputs:
+  binary-url:
+    description: HTTPS URL of the staged Linux x86-64 dmg executable.
+    required: true
+  binary-sha256:
+    description: Expected SHA-256 from the independently reviewed pilot package.
+    required: true
+  config-path:
+    description: Configuration path in the protected base commit.
+    default: .dmg/dmg.toml
+  policy-path:
+    description: Policy path in the protected base commit.
+    default: .dmg/policy.toml
+runs:
+  using: composite
+  steps:
+    - name: Fetch the reviewed revisions and verified scanner
+      id: prepare
+      shell: bash
+      env:
+        DMG_FETCH_TOKEN: ${{ github.token }}
+        DMG_BINARY_URL: ${{ inputs.binary-url }}
+        DMG_BINARY_SHA256: ${{ inputs.binary-sha256 }}
+        DMG_CONFIG_PATH: ${{ inputs.config-path }}
+        DMG_POLICY_PATH: ${{ inputs.policy-path }}
+      run: python3 "$GITHUB_ACTION_PATH/gate.py" prepare
+    - name: Analyze migrations and enforce policy
+      shell: bash
+      env:
+        DMG_GATE_STATE: ${{ steps.prepare.outputs.directory }}
+      run: python3 "$GITHUB_ACTION_PATH/gate.py" check
+    - name: Retain report and provenance
+      if: ${{ always() && steps.prepare.outputs.directory != '' }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: dmg-pilot-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ steps.prepare.outputs.directory }}/reports/
+        if-no-files-found: error
+        retention-days: 7

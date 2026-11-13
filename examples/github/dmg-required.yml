@@ -1,0 +1,19 @@
+name: Database Migration Guard
+
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  migration-guard:
+    name: Migration Guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      # Replace the action repository and full commit SHA with the reviewed pilot action.
+      - uses: YOUR-ORG/database-migration-guard/integrations/github@0123456789abcdef0123456789abcdef01234567
+        with:
+          # Replace both values from the same staged Linux x86-64 package.
+          binary-url: https://github.com/YOUR-ORG/database-migration-guard/releases/download/v0.1.0-pilot/dmg-0.1.0-x86_64-unknown-linux-gnu
+          binary-sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
