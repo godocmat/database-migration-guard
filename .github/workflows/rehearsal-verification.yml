@@ -1,0 +1,79 @@
+name: Verify disposable PostgreSQL rehearsal
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    if: ${{ github.ref_protected && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    name: PostgreSQL ${{ matrix.postgres }} on cgroup v2
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - postgres: '15.20'
+            manifest: 'sha256:675e329d71b3d00534e50356ad068fa95d7bdd9c68f498f17a016ae19990d85e'
+            config: 'sha256:24084862c6bcb8a9b348892f7135c1099cb581dbca4d046aec95734717714b18'
+          - postgres: '16.16'
+            manifest: 'sha256:a2f7e20374cd8fd8ed4a588b79549e10589bea7b1686e77922f5ac741b80b8a1'
+            config: 'sha256:3cbd775daa28461ef484ed88ca1e5a5a72ff126e196deeebce6fec764edf1200'
+          - postgres: '17.12'
+            manifest: 'sha256:005c5c37db96c1e6652a79ea31f9886402fba81ac95dc2db897739121dd7f8f2'
+            config: 'sha256:6b75136145ddabf3d9a4b69660402082de7c56b734cfe50555b0674774dd742a'
+          - postgres: '18.7'
+            manifest: 'sha256:fa1b61f5a4844f4d4b73c9b15716cfc75fe70c931f2d32723630f3b900056366'
+            config: 'sha256:0f6c51e48b3458e87ab43692e49c9dafc72ffe0a0dbde3fd8cdb6ab92d5c025e'
+    env:
+      DOCS_RS: '1'
+      LIBCLANG_PATH: /usr/lib/llvm-18/lib
+      CLANG_PATH: /usr/bin/clang-18
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Build the locked Rust integration fixture
+        shell: bash
+        run: |
+          if [[ ! -f "$LIBCLANG_PATH/libclang.so" || ! -x "$CLANG_PATH" ]]; then
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends clang-18 libclang-18-dev
+          fi
+          test -f "$("$CLANG_PATH" -print-resource-dir)/include/stdbool.h"
+          test -f "$LIBCLANG_PATH/libclang.so"
+          rustc -Vv
+          cargo fetch --locked
+          cargo test --locked --offline -p dmg-simulate --lib --no-run --message-format=json > "$RUNNER_TEMP/dmg-worker-artifacts.jsonl"
+          fixture=$(jq -ser '[.[] | select(.reason == "compiler-artifact" and .target.name == "dmg_simulate" and .profile.test and .executable != null) | .executable] | if length == 1 then .[0] else error("Expected one test executable") end' "$RUNNER_TEMP/dmg-worker-artifacts.jsonl")
+          test -x "$fixture"
+          printf 'DMG_WORKER_TEST_BINARY=%s\n' "$fixture" >> "$GITHUB_ENV"
+      - name: Stage the pinned engine and PostgreSQL image archive
+        shell: bash
+        env:
+          POSTGRES_MANIFEST: ${{ matrix.manifest }}
+          DOCKER_ARCHIVE_SHA256: 3fb5d1f13014c18cc54945bc177c58a9056a482dada031e17d12cf2e6922c973
+          CRANE_ARCHIVE_SHA256: 0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0
+        run: |
+          root="$RUNNER_TEMP/dmg-worker"
+          mkdir -p "$root/registry-config"
+          curl --disable --fail --silent --show-error --location --proto '=https' --max-time 120 https://download.docker.com/linux/static/stable/x86_64/docker-29.9.3.tgz -o "$root/engine.tgz"
+          printf '%s  %s\n' "$DOCKER_ARCHIVE_SHA256" "$root/engine.tgz" | sha256sum --check --strict
+          tar -xzf "$root/engine.tgz" -C "$root" docker
+          curl --disable --fail --silent --show-error --location --proto '=https' --max-time 90 https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz -o "$root/crane.tgz"
+          printf '%s  %s\n' "$CRANE_ARCHIVE_SHA256" "$root/crane.tgz" | sha256sum --check --strict
+          tar -xzf "$root/crane.tgz" -C "$root" crane
+          DOCKER_CONFIG="$root/registry-config" timeout 180 "$root/crane" pull --platform linux/amd64 --format tarball "docker.io/library/postgres@$POSTGRES_MANIFEST" "$root/postgres.tar"
+      - name: Exercise lifecycle, deadlines, rehearsal, and verified teardown
+        shell: bash
+        env:
+          POSTGRES_VERSION: ${{ matrix.postgres }}
+          POSTGRES_CONFIG: ${{ matrix.config }}
+        run: |
+          root="$RUNNER_TEMP/dmg-worker"
+          sudo --non-interactive -- unshare --mount --net --propagation private -- /usr/bin/bash \
+            scripts/verify-rehearsal-ci.sh "$root/docker" "$root/postgres.tar" "$DMG_WORKER_TEST_BINARY" "$POSTGRES_VERSION" "$POSTGRES_CONFIG"
