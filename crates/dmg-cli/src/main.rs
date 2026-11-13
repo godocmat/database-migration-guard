@@ -6,7 +6,6 @@ mod policy;
 mod render;
 
 use std::{
-    ffi::OsString,
     io::{self, Write},
     path::{Path, PathBuf},
     process::ExitCode,
@@ -143,7 +142,7 @@ fn parse_digest(value: &str) -> Result<ContentDigest, dmg_core::digest::InvalidC
 }
 
 fn main() -> ExitCode {
-    let code = match Cli::try_parse_from(std::env::args_os().collect::<Vec<OsString>>()) {
+    let code = match Cli::try_parse() {
         Ok(cli) => match run(cli.command) {
             Ok(code) => code,
             Err(failure) => {
