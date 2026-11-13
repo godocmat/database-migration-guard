@@ -1,8 +1,11 @@
 //! Discover migration files and retain the source bytes used by the plan.
 
+mod git;
+mod integrity;
 mod sqlx;
 mod worktree;
 
+pub use git::GitRevisions;
 pub use sqlx::SqlxLayout;
 
 use std::{
@@ -14,8 +17,8 @@ use dmg_core::{
     coverage::{Coverage, CoverageGap, CoverageGapKind, DiagnosticScope},
     digest::ContentDigest,
     migration::{
-        ExecutionMode, MigrationAdapter, MigrationDirection, MigrationFile, MigrationIdentity,
-        MigrationPlan,
+        ExecutionMode, IntegrityBasis, MigrationAdapter, MigrationDirection, MigrationFile,
+        MigrationIdentity, MigrationPlan,
     },
     source::{ByteRange, RepoPath},
 };
@@ -27,6 +30,52 @@ pub fn discover_worktree(repository: &Path, options: &DiscoveryOptions) -> Disco
     let mut inventory = Inventory::default();
     worktree::collect(repository, options, &mut inventory);
     inventory.finish()
+}
+
+/// Compare explicit local commits and load the candidate sources from raw Git blobs.
+pub fn discover_git(
+    repository: &Path,
+    revisions: &GitRevisions,
+    options: &DiscoveryOptions,
+) -> Discovery {
+    let baseline = git::collect(repository, &revisions.base, "base", options).finish();
+    let mut head = git::collect(repository, &revisions.head, "head", options).finish();
+    if baseline.plan.coverage.gaps().is_empty() && head.plan.coverage.gaps().is_empty() {
+        let basis = IntegrityBasis::Git {
+            base_commit: revisions.base.clone(),
+            head_commit: revisions.head.clone(),
+        };
+        let comparison = integrity::compare(
+            basis,
+            integrity::file_digests(&baseline.plan.inventory),
+            &head.plan.inventory,
+        );
+        head.plan.selected_forwards = Some(integrity::select_changed(&comparison));
+        head.plan.integrity = Some(comparison);
+    } else {
+        let gaps = head
+            .plan
+            .coverage
+            .gaps()
+            .iter()
+            .cloned()
+            .chain(
+                baseline
+                    .plan
+                    .coverage
+                    .gaps()
+                    .iter()
+                    .cloned()
+                    .map(|mut gap| {
+                        gap.message = format!("Git base: {}", gap.message);
+                        gap
+                    }),
+            )
+            .collect();
+        head.plan.coverage = Coverage::from_gaps(gaps);
+        head.plan.selected_forwards = None;
+    }
+    head
 }
 
 /// The reportable plan and its original source inputs.
@@ -59,7 +108,7 @@ impl DiscoveryOptions {
         adapter: Adapter,
         limits: DiscoveryLimits,
     ) -> Result<Self, DiscoveryConfigError> {
-        if roots.is_empty() || roots.iter().any(|path| !valid_root(path)) {
+        if roots.is_empty() || roots.iter().any(|path| !valid_path(path)) {
             return Err(DiscoveryConfigError::InvalidRoots);
         }
         roots.sort();
@@ -81,7 +130,7 @@ impl DiscoveryOptions {
     }
 }
 
-fn valid_root(path: &RepoPath) -> bool {
+fn valid_path(path: &RepoPath) -> bool {
     path.as_str().len() <= 1024
         && path.as_str().split('/').all(|part| {
             !part.eq_ignore_ascii_case(".git")
@@ -115,6 +164,8 @@ pub enum DiscoveryConfigError {
     InvalidRoots,
     #[error("invalid migration entry or byte limits")]
     InvalidLimits,
+    #[error("Git base and head must be full commit IDs of the same hash format")]
+    InvalidGitRevisions,
     #[error("plain SQL filename pattern must have one capture for the version")]
     InvalidVersionCapture,
     #[error("plain SQL filename pattern must fit within 1024 bytes")]

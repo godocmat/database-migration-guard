@@ -213,3 +213,142 @@ fn sqlx(layout: dmg_discovery::SqlxLayout) -> DiscoveryOptions {
     )
     .unwrap()
 }
+
+#[test]
+fn git_compares_raw_bytes_and_keeps_unchanged_head_sources() {
+    use dmg_core::migration::IntegrityStatus::{Missing, Modified, New, Unchanged};
+    let repo = TestRepo::new().unwrap();
+    init_git(&repo.0);
+    let first = b"-- base\nSELECT 1;\n";
+    repo.write("migrations/01_first.sql", first);
+    repo.write("migrations/02_second.sql", b"SELECT 2;\n");
+    repo.write("migrations/03_third.sql", b"SELECT 3;\n");
+    repo.write("migrations/04_fourth.sql", b"SELECT 4;\n");
+    let base = commit(&repo.0, "base");
+
+    let changed = b"-- base\r\nSELECT 1;\r\n";
+    repo.write("migrations/01_first.sql", changed);
+    fs::rename(
+        repo.0.join("migrations/02_second.sql"),
+        repo.0.join("migrations/2_renamed.sql"),
+    )
+    .unwrap();
+    fs::rename(
+        repo.0.join("migrations/03_third.sql"),
+        repo.0.join("migrations/5_moved.sql"),
+    )
+    .unwrap();
+    let head = commit(&repo.0, "candidate");
+    repo.write("migrations/01_first.sql", b"SELECT 999;");
+    repo.write("migrations/9_untracked.sql", b"SELECT 999;");
+    git(&repo.0, &["replace", &head, &base]);
+
+    let revisions = dmg_discovery::GitRevisions::new(&base, &head).unwrap();
+    let discovery =
+        dmg_discovery::discover_git(&repo.0, &revisions, &plain(DiscoveryLimits::default()));
+    assert_eq!(discovery.plan.coverage.status(), CoverageStatus::Complete);
+    let comparison = discovery.plan.integrity.as_ref().unwrap();
+    assert_eq!(
+        comparison
+            .changes
+            .iter()
+            .map(|row| row.status)
+            .collect::<Vec<_>>(),
+        [Modified, Unchanged, Missing, Unchanged, New]
+    );
+    let moved = &comparison.changes[1];
+    assert_ne!(
+        moved.before.as_ref().unwrap().path,
+        moved.after.as_ref().unwrap().path
+    );
+    assert_eq!(
+        discovery.source_bytes(&RepoPath::new("migrations/01_first.sql").unwrap()),
+        Some(changed.as_slice())
+    );
+    assert_eq!(
+        discovery.source(&RepoPath::new("migrations/04_fourth.sql").unwrap()),
+        Some("SELECT 4;\n")
+    );
+    assert_eq!(
+        discovery
+            .plan
+            .selected_forwards
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(RepoPath::as_str)
+            .collect::<Vec<_>>(),
+        [
+            "migrations/01_first.sql",
+            "migrations/2_renamed.sql",
+            "migrations/5_moved.sql"
+        ]
+    );
+    assert!(discovery.plan.applied_history.is_none());
+}
+
+#[test]
+fn unavailable_or_noncommit_base_preserves_explicit_head_inventory() {
+    let repo = TestRepo::new().unwrap();
+    init_git(&repo.0);
+    let sql = b"SELECT 1;\n";
+    repo.write("migrations/1_first.sql", sql);
+    let head = commit(&repo.0, "candidate");
+    let blob = git(&repo.0, &["rev-parse", "HEAD:migrations/1_first.sql"]);
+    for base in ["0".repeat(40), blob] {
+        let revisions = dmg_discovery::GitRevisions::new(&base, &head).unwrap();
+        let discovery =
+            dmg_discovery::discover_git(&repo.0, &revisions, &plain(DiscoveryLimits::default()));
+        assert!(discovery.plan.selected_forwards.is_none());
+        assert!(discovery.plan.integrity.is_none());
+        assert_eq!(
+            discovery.plan.coverage.gaps()[0].kind,
+            CoverageGapKind::MissingIntegrityEvidence
+        );
+        let file = &discovery.plan.inventory[0];
+        assert_eq!(discovery.source_bytes(&file.path), Some(sql.as_slice()));
+    }
+}
+
+fn git(repo: &Path, args: &[&str]) -> String {
+    let mut command = std::process::Command::new("git");
+    for (key, _) in std::env::vars_os() {
+        if key
+            .to_string_lossy()
+            .to_ascii_uppercase()
+            .starts_with("GIT_")
+        {
+            command.env_remove(key);
+        }
+    }
+    let output = command
+        .current_dir(repo)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env(
+            "GIT_CONFIG_GLOBAL",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        )
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap().trim().into()
+}
+
+fn init_git(repo: &Path) {
+    git(repo, &["init", "--quiet", "--object-format=sha1"]);
+    git(repo, &["config", "user.name", "DMG Fixture"]);
+    git(repo, &["config", "user.email", "fixture@example.invalid"]);
+    git(repo, &["config", "core.autocrlf", "true"]);
+    fs::write(repo.join(".gitattributes"), "*.sql -text\n").unwrap();
+}
+
+fn commit(repo: &Path, message: &str) -> String {
+    git(repo, &["add", "--all"]);
+    git(repo, &["commit", "--quiet", "--no-gpg-sign", "-m", message]);
+    git(repo, &["rev-parse", "HEAD"])
+}
