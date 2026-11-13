@@ -181,7 +181,9 @@ fn write_finding(output: &mut impl Write, finding: &Finding) -> io::Result<()> {
         write!(output, " on {}", object_name(object))?;
     }
     writeln!(output)?;
-    writeln!(output, "  - {}", prose(&finding.explanation))?;
+    if !finding.explanation.is_empty() {
+        writeln!(output, "  - **Finding** · {}", prose(&finding.explanation))?;
+    }
     if !finding.impact.is_empty() {
         writeln!(output, "  - **Impact** · {}", prose(&finding.impact))?;
     }
