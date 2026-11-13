@@ -1,0 +1,1 @@
+BEGIN; UPDATE t SET v = 1; UPDATE t SET v = 2 WHERE id = 1; COMMIT;

@@ -1,0 +1,3 @@
+SELECT 'é';
+ALTER TABLE t ADD COLUMN broken ;
+DROP TABLE t;

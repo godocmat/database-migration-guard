@@ -1,0 +1,6 @@
+[workspace]
+members = ["pg18", "pg17", "sql"]
+resolver = "2"
+
+[workspace.dependencies]
+serde_json = "1"

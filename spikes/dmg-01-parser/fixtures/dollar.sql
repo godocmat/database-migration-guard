@@ -1,0 +1,2 @@
+SELECT 'é';
+DO $body$ BEGIN EXECUTE 'SELECT 1;'; END;
