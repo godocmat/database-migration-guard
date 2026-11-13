@@ -466,6 +466,59 @@ fn supabase_keeps_lexical_versions_and_preserves_native_batch_boundaries() {
     assert_eq!(report(&checked)["findings"][0]["rule_id"], "PG007");
 }
 
+#[test]
+fn flyway_repeatable_edits_remain_selected_and_missing_repeatables_block() {
+    let project = Fixture::new();
+    fs::remove_file(project.path("migrations/001_create.sql")).unwrap();
+    project.write("dmg.toml", native_config("flyway", ""));
+    let path = "migrations/R__summary.sql";
+    let original = b"SELECT 1;\n";
+    let integrity = json!({
+        "schema_version": 1,
+        "adapter": "flyway",
+        "migrations": [{
+            "version": {"kind": "repeatable", "value": "summary"},
+            "direction": "forward",
+            "path": path,
+            "sha256": ContentDigest::of(original)
+        }]
+    })
+    .to_string();
+    let digest = ContentDigest::of(integrity.as_bytes()).to_string();
+    project.write("integrity.json", integrity);
+    project.write(path, "SELECT 2;\n");
+
+    let check = || {
+        project.run(&[
+            "check",
+            "--policy",
+            "policy.toml",
+            "--format",
+            "json",
+            "--integrity-manifest",
+            "integrity.json",
+            "--integrity-sha256",
+            &digest,
+        ])
+    };
+    let changed = check();
+    assert_exit(&changed, 0);
+    let data = report(&changed);
+    assert_eq!(data["migrations"]["selected_forwards"], json!([path]));
+    assert_eq!(
+        data["migrations"]["integrity"]["changes"][0]["status"],
+        "modified"
+    );
+
+    fs::remove_file(project.path(path)).unwrap();
+    let removed = check();
+    assert_exit(&removed, 1);
+    assert_eq!(
+        report(&removed)["decision"]["reasons"][0]["kind"],
+        "integrity_violation"
+    );
+}
+
 fn native_config(adapter: &str, settings: &str) -> String {
     format!(
         "schema_version = 1\ntarget = 18\nroots = [\"migrations\"]\n[adapter]\nkind = \"{adapter}\"\n{settings}"
