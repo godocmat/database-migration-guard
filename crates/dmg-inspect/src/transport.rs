@@ -7,7 +7,7 @@ use rustls::{
 };
 use thiserror::Error;
 use tokio::time::timeout;
-use tokio_postgres::{Config, IsolationLevel, Transaction, config::SslMode};
+use tokio_postgres::{Client, Config, IsolationLevel, Transaction, config::SslMode};
 use tokio_postgres_rustls::MakeRustlsConnect;
 use zeroize::Zeroizing;
 
@@ -19,7 +19,7 @@ const SERVER_INFO: &str = "
     SELECT pg_catalog.current_setting('server_version_num')::pg_catalog.int4,
            pg_catalog.current_setting('block_size')::pg_catalog.int4,
            pg_catalog.current_setting('transaction_read_only') = 'on',
-           pg_catalog.current_setting('transaction_isolation') = $1,
+           pg_catalog.current_setting('transaction_isolation') = $1::pg_catalog.text,
            pg_catalog.current_schemas(true) = ARRAY['pg_catalog']::pg_catalog.name[]
 ";
 
@@ -131,24 +131,7 @@ impl InspectionTarget {
             .map_err(|error| TransportError::postgres(TransportStage::Connect, &error))?;
         drop(config);
 
-        let transaction = async {
-            let mut tx = client
-                .build_transaction()
-                .isolation_level(isolation.level())
-                .read_only(true)
-                .start()
-                .await
-                .map_err(|error| TransportError::postgres(TransportStage::Setup, &error))?;
-            let result = match server_info(&tx, isolation).await {
-                Ok(server) => read(&mut tx, server).await,
-                Err(error) => Err(error),
-            };
-            let rollback = tx
-                .rollback()
-                .await
-                .map_err(|error| TransportError::postgres(TransportStage::Rollback, &error));
-            result.and_then(|value| rollback.map(|()| value))
-        };
+        let transaction = read_only_transaction(&mut client, isolation, None, read);
 
         // Poll the connection inline so abandoning the operation closes the
         // socket. Polling messages explicitly discards server notices.
@@ -168,6 +151,41 @@ impl InspectionTarget {
             result = driver => result,
         }
     }
+}
+
+/// The TCP transport sets startup options. The worker supplies the same
+/// restrictions locally to a fresh, dedicated session it has authenticated.
+pub(crate) async fn read_only_transaction<T>(
+    client: &mut Client,
+    isolation: InspectionIsolation,
+    local_settings: Option<InspectionTimeouts>,
+    read: impl for<'tx, 'client> AsyncFnOnce(
+        &'tx mut Transaction<'client>,
+        ServerInfo,
+    ) -> Result<T, TransportError>,
+) -> Result<T, TransportError> {
+    let mut tx = client
+        .build_transaction()
+        .isolation_level(isolation.level())
+        .read_only(true)
+        .start()
+        .await
+        .map_err(|error| TransportError::postgres(TransportStage::Setup, &error))?;
+    let result = async {
+        if let Some(timeouts) = local_settings {
+            tx.batch_execute(&timeouts.local_settings())
+                .await
+                .map_err(|error| TransportError::postgres(TransportStage::Setup, &error))?;
+        }
+        let server = server_info(&tx, isolation).await?;
+        read(&mut tx, server).await
+    }
+    .await;
+    let rollback = tx
+        .rollback()
+        .await
+        .map_err(|error| TransportError::postgres(TransportStage::Rollback, &error));
+    result.and_then(|value| rollback.map(|()| value))
 }
 
 impl fmt::Debug for InspectionTarget {
@@ -240,11 +258,25 @@ impl InspectionTimeouts {
         })
     }
 
+    pub(crate) fn overall(self) -> Duration {
+        self.overall
+    }
+
     fn startup_options(self) -> String {
         format!(
             "-c default_transaction_read_only=on -c search_path=pg_catalog,pg_temp \
              -c statement_timeout={}ms -c lock_timeout={}ms \
              -c idle_in_transaction_session_timeout={}ms",
+            self.statement_ms, self.lock_ms, self.idle_transaction_ms,
+        )
+    }
+
+    fn local_settings(self) -> String {
+        format!(
+            "SET LOCAL search_path = pg_catalog, pg_temp; \
+             SET LOCAL statement_timeout = '{}ms'; \
+             SET LOCAL lock_timeout = '{}ms'; \
+             SET LOCAL idle_in_transaction_session_timeout = '{}ms'",
             self.statement_ms, self.lock_ms, self.idle_transaction_ms,
         )
     }

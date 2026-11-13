@@ -12,12 +12,16 @@ use dmg_core::{
     snapshot::{DependencyEdge, PartitionEdge, SchemaSnapshotV1, SnapshotError},
 };
 use thiserror::Error;
+use tokio::time::timeout;
 use tokio_postgres::{
-    Row, Transaction,
+    Client, Row, Transaction,
     types::{FromSqlOwned, ToSql, Type},
 };
 
-use crate::{InspectionTarget, InspectionTimeouts, ServerInfo, TransportError, TransportStage};
+use crate::{
+    InspectionTarget, InspectionTimeouts, ServerInfo, TransportError, TransportStage,
+    transport::{InspectionIsolation, read_only_transaction},
+};
 
 mod details;
 mod structure;
@@ -97,26 +101,50 @@ impl InspectionTarget {
         options: CatalogOptions,
         timeouts: InspectionTimeouts,
     ) -> Result<InspectionEvidenceV1, CatalogError> {
-        let observed_at_unix_seconds = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| CatalogError::Clock)?
-            .as_secs();
+        let observed_at = observation_time()?;
         let mut collection = Collection::new(scope, options);
         let result = self
             .with_read_only(timeouts, async |tx, server| {
                 collection.collect(tx, server).await
             })
             .await;
-        if let Err(error) = result {
-            let reason = error.gap_reason();
-            collection
-                .gaps
-                .push(target_gap(InspectionField::Connection, reason));
-            collection.note_interruption(reason);
-        }
-
-        collection.into_evidence(target_id, observed_at_unix_seconds)
+        collection.finish(target_id, observed_at, result)
     }
+}
+
+/// Collect fixed catalog evidence on a fresh, dedicated worker session.
+///
+/// The worker authenticates the session, drives its connection and closes it
+/// after collection, including after a client deadline. Use the TLS target
+/// API when opening a connection to a remote server.
+pub async fn observe_session_catalog(
+    client: &mut Client,
+    target_id: TargetId,
+    scope: &InspectionScope,
+    options: CatalogOptions,
+    timeouts: InspectionTimeouts,
+) -> Result<InspectionEvidenceV1, CatalogError> {
+    let observed_at = observation_time()?;
+    let mut collection = Collection::new(scope, options);
+    let result = timeout(
+        timeouts.overall(),
+        read_only_transaction(
+            client,
+            InspectionIsolation::Catalog,
+            Some(timeouts),
+            async |tx, server| collection.collect(tx, server).await,
+        ),
+    )
+    .await
+    .unwrap_or(Err(TransportError::Deadline));
+    collection.finish(target_id, observed_at, result)
+}
+
+fn observation_time() -> Result<u64, CatalogError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_secs())
+        .map_err(|_| CatalogError::Clock)
 }
 
 type Oid = u32;
@@ -184,6 +212,21 @@ impl Collection {
             self.collect_details(tx).await?;
         }
         Ok(())
+    }
+
+    fn finish(
+        mut self,
+        target_id: TargetId,
+        observed_at: u64,
+        result: Result<(), TransportError>,
+    ) -> Result<InspectionEvidenceV1, CatalogError> {
+        if let Err(error) = result {
+            let reason = error.gap_reason();
+            self.gaps
+                .push(target_gap(InspectionField::Connection, reason));
+            self.note_interruption(reason);
+        }
+        self.into_evidence(target_id, observed_at)
     }
 
     fn note_interruption(&mut self, reason: InspectionGapReason) {
