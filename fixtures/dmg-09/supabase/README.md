@@ -12,20 +12,24 @@ The [native probe](native_probe.py) exercises `supabase migration new`, `migrati
 
 The CLI normally sends ordinary statements in an extended-query batch and adds the history insert to the final batch. Recognized standalone operations split that batch. The exact first line `-- pg-delta: transaction=false` or an authored top-level transaction boundary switches the whole file to sequential delivery. The explicit transaction commands then control which statements share a transaction. [Migration application](https://github.com/supabase/cli/blob/v3.0.0/apps/cli/src/command-internal/migration-apply.ts) · [Directive parsing](https://github.com/supabase/cli/blob/v3.0.0/apps/cli/src/command-internal/migration-file.ts) · [PostgreSQL pipelining](https://www.postgresql.org/docs/18/protocol-flow.html#PROTOCOL-FLOW-PIPELINING)
 
-Both servers returned CLI exit 1 for each candidate below and left only the baseline version in history.
+Both servers produced the same outcomes below. Failed cases left only the baseline version in history.
 
-| Candidate | Server SQLSTATE | State after failure |
+| Candidate | CLI exit and server SQLSTATE | Durable state |
 | --- | --- | --- |
-| Default ALTER followed by division by zero | `22012` | Earlier ALTER rolled back. |
-| Exact directive with LF or with UTF-8 BOM and CRLF | `22012` | Earlier ALTER committed. |
-| Directive preceded by a blank line or followed by a trailing space | `22012` | Earlier ALTER rolled back. |
-| ALTER, concurrent unique index with a leading block comment and a newline after `CREATE`, then another ALTER and division by zero | `22012` | First ALTER and valid index committed. Second ALTER rolled back. |
-| ALTER, `VACUUM (ANALYZE)`, second ALTER and division by zero | `22012` | First ALTER committed. Second ALTER rolled back. |
-| ALTER followed by concurrent index with a comment between `CREATE` and `INDEX` | `25001` | Earlier ALTER rolled back. The internal comment prevented recognition as a standalone operation. |
-| ALTER before `BEGIN`, then another ALTER and a concurrent unique index inside the block | `25001` | First ALTER committed. Second ALTER rolled back. |
-| ALTER and `SAVEPOINT` in the default batch, with a later `ROLLBACK TO SAVEPOINT` | `25P01` | Earlier ALTER rolled back. The implicit batch did not establish an explicit transaction block for the savepoint. |
+| Default ALTER followed by division by zero | 1, `22012` | Earlier ALTER rolled back. |
+| Exact directive with LF or with UTF-8 BOM and CRLF | 1, `22012` | Earlier ALTER committed. |
+| Directive preceded by a blank line or followed by a trailing space | 1, `22012` | Earlier ALTER rolled back. |
+| ALTER, concurrent unique index with a leading block comment and a newline after `CREATE`, then another ALTER and division by zero | 1, `22012` | First ALTER and valid index committed. Second ALTER rolled back. |
+| ALTER, `VACUUM (ANALYZE)`, second ALTER and division by zero | 1, `22012` | First ALTER committed. Second ALTER rolled back. |
+| ALTER followed by concurrent index with a comment between `CREATE` and `INDEX` | 1, `25001` | Earlier ALTER rolled back. The internal comment prevented recognition as a standalone operation. |
+| The same unrecognized index spelling after `SELECT 1` | 1, `25001` | The index was absent. |
+| The same unrecognized index spelling first, after a comment-only token | 0 | A valid index and the candidate history row committed. |
+| ALTER before `BEGIN`, then another ALTER and a concurrent unique index inside the block | 1, `25001` | First ALTER committed. Second ALTER rolled back. |
+| ALTER and `SAVEPOINT` in the default batch, with a later `ROLLBACK TO SAVEPOINT` | 1, `25P01` | Earlier ALTER rolled back. The implicit batch did not establish an explicit transaction block for the savepoint. |
+| ALTER, `COMMIT` with an adjacent or spaced block comment, then division by zero | 1, `22012` | Earlier ALTER committed in both cases. The native matcher classifies the two spellings differently. |
+| `BEGIN` followed by an ALTER and EOF, with and without the exact directive | 0 | The ALTER and the candidate history row both rolled back when the session closed. |
 
-For automatic splitting, classification needs the source text. Both concurrent index spellings above represent the same SQL operation to PostgreSQL, but the CLI executes them in different transaction contexts. Preserve original file bytes and distinguish extended-query batches from explicit file transactions, including when a batch contains one SQL statement and a history insert. Treat transaction modes outside the adapter's verified scope as incomplete. These probes exercise SQL migrations only. Managed Supabase schemas, extensions, hosted deployments, and older CLI versions require separate evidence.
+For automatic splitting, classification needs the source text. The CLI executes different spellings of the same PostgreSQL operation in different transaction contexts. PostgreSQL can identify an extended-query pipeline once the first command has executed without a Sync. Guard preserves original file bytes and distinguishes extended-query batches from explicit file transactions. These probes exercise SQL migrations only. Managed Supabase schemas, extensions, hosted deployments, and older CLI versions require separate evidence. [PostgreSQL extended-query pipelining](https://www.postgresql.org/docs/18/protocol-flow.html#PROTOCOL-FLOW-PIPELINING)
 
 ## Reproduction
 

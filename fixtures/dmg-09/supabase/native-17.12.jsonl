@@ -11,5 +11,11 @@
 {"candidate_sha256":"63c0c8ee4bd1db0171d2c62400318a66650ae7559a13d25760d8618ff940e836","case":"automatic_split","columns":["id","first_value"],"exit":1,"history_versions":["01"],"sqlstate":"22012","valid_index":true}
 {"candidate_sha256":"8d1507f4f28fcd2e1a4c8775255480b994c4e8dda6406d5a250371c7ecb03885","case":"vacuum_split","columns":["id","first_value"],"exit":1,"history_versions":["01"],"sqlstate":"22012","valid_index":false}
 {"candidate_sha256":"1f0c989bef0a0ae36993ab8861bedffc1aaa33a23d645ad97bd4ddee4684b80a","case":"internal_comment","columns":["id"],"exit":1,"history_versions":["01"],"sqlstate":"25001","valid_index":false}
+{"candidate_sha256":"64421ae9f4cde1b5c436d85c162804a63cfb3004371f9a74db0e526061a78849","case":"internal_comment_first","columns":["id"],"exit":0,"history_versions":["01","02"],"sqlstate":null,"valid_index":true}
+{"candidate_sha256":"8f1e8dc80e2333d54e443d762ec195433cc37cf5fba118a1184c236d89379ed6","case":"internal_comment_after_select","columns":["id"],"exit":1,"history_versions":["01"],"sqlstate":"25001","valid_index":false}
 {"candidate_sha256":"7fe76db38c1daee799df692206262e18c8db6d5e8d0b740ebdb16863b2b02805","case":"explicit_transaction","columns":["id","first_value"],"exit":1,"history_versions":["01"],"sqlstate":"25001","valid_index":false}
 {"candidate_sha256":"c580d119e4f709862971e0ea4d8d17e666be53120d4825ca905d7990df4c9bb0","case":"implicit_savepoint","columns":["id"],"exit":1,"history_versions":["01"],"sqlstate":"25P01","valid_index":false}
+{"candidate_sha256":"8139f50ecfb30afe540c75581c98f0473309d703a409208f55de6c96df2678cd","case":"adjacent_commit_comment","columns":["id","first_value"],"exit":1,"history_versions":["01"],"sqlstate":"22012","valid_index":false}
+{"candidate_sha256":"c7d0481f6c382020aed641d21e7566c5584a0c0aa0c64b4b3e08022b07e3f733","case":"spaced_commit_comment","columns":["id","first_value"],"exit":1,"history_versions":["01"],"sqlstate":"22012","valid_index":false}
+{"candidate_sha256":"36699f94ee875af756629a4e9064fe87b130183dc20ceedd8fd5819eb987d59a","case":"open_explicit_transaction","columns":["id"],"exit":0,"history_versions":["01"],"sqlstate":null,"valid_index":false}
+{"candidate_sha256":"63cee840d4cae031f0b8130e52875b3e82a96fae33bc195a35a05e5cbe216729","case":"open_directive_transaction","columns":["id"],"exit":0,"history_versions":["01"],"sqlstate":null,"valid_index":false}

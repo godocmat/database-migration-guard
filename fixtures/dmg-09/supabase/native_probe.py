@@ -234,6 +234,16 @@ def duplicate(probe):
 
 
 def failing_candidate(probe, case, content, sqlstate, first_survives=False, index_survives=False):
+    return candidate_outcome(
+        probe, case, content, exit_code=1, sqlstate=sqlstate,
+        first_survives=first_survives, index_survives=index_survives,
+    )
+
+
+def candidate_outcome(
+    probe, case, content, *, exit_code, sqlstate, first_survives=False,
+    index_survives=False, candidate_recorded=False,
+):
     project = probe.create_project(case)
     probe.migration(project, "01_base.sql", BASE + "\n")
     require(applied_filenames(probe.apply(project)) == ["01_base.sql"], f"baseline failed for {case}")
@@ -245,14 +255,15 @@ def failing_candidate(probe, case, content, sqlstate, first_survives=False, inde
     index = probe.valid_index(project)
     versions = [row["version"] for row in probe.history(project)]
     expected_columns = ["id", "first_value"] if first_survives else ["id"]
+    expected_versions = ["01", "02"] if candidate_recorded else ["01"]
     require(
-        result.returncode == 1 and states == [sqlstate] and columns == expected_columns
-        and index == index_survives and versions == ["01"],
+        result.returncode == exit_code and states == ([sqlstate] if sqlstate else [])
+        and columns == expected_columns and index == index_survives and versions == expected_versions,
         f"unexpected {case}: exit {result.returncode}, SQLSTATE {states}, columns {columns}, "
         f"valid index {index}, history {versions}",
     )
     return {
-        "case": case, "exit": result.returncode, "sqlstate": states[0], "columns": columns,
+        "case": case, "exit": result.returncode, "sqlstate": sqlstate, "columns": columns,
         "valid_index": index, "history_versions": versions, "candidate_sha256": file_sha256(migration),
     }
 
@@ -281,6 +292,12 @@ def observe(probe):
     )
     internal_comment = "CREATE /* internal comment */ INDEX CONCURRENTLY probe_first_idx ON public.probe (first_value);"
     yield failing_candidate(probe, "internal_comment", f"{ADD_FIRST}\n{internal_comment}\n", "25001")
+    first_index = internal_comment.replace("(first_value)", "(id)")
+    yield candidate_outcome(
+        probe, "internal_comment_first", f"/* comment-only token */;\n{first_index}\n",
+        exit_code=0, sqlstate=None, index_survives=True, candidate_recorded=True,
+    )
+    yield failing_candidate(probe, "internal_comment_after_select", f"SELECT 1;\n{first_index}\n", "25001")
     yield failing_candidate(
         probe, "explicit_transaction",
         f"{ADD_FIRST}\nBEGIN;\n{ADD_SECOND}\n{index}\nCOMMIT;\n", "25001", first_survives=True,
@@ -289,6 +306,22 @@ def observe(probe):
         probe, "implicit_savepoint",
         f"{ADD_FIRST}\nSAVEPOINT before_add;\nROLLBACK TO SAVEPOINT before_add;\n{ADD_SECOND}\n",
         "25P01",
+    )
+    yield failing_candidate(
+        probe, "adjacent_commit_comment", f"{ADD_FIRST}\nCOMMIT/* adjacent */;\n{DIVIDE}\n",
+        "22012", first_survives=True,
+    )
+    yield failing_candidate(
+        probe, "spaced_commit_comment", f"{ADD_FIRST}\nCOMMIT /* spaced */;\n{DIVIDE}\n",
+        "22012", first_survives=True,
+    )
+    yield candidate_outcome(
+        probe, "open_explicit_transaction", f"BEGIN;\n{ADD_FIRST}\n",
+        exit_code=0, sqlstate=None,
+    )
+    yield candidate_outcome(
+        probe, "open_directive_transaction", f"{OPT_OUT}\nBEGIN;\n{ADD_FIRST}\n",
+        exit_code=0, sqlstate=None,
     )
 
 
