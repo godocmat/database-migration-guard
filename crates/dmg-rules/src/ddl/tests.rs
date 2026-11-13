@@ -194,6 +194,170 @@ fn public_destructive_and_rename_actions_use_original_spans() {
 }
 
 #[test]
+fn removals_report_compatibility_and_data_loss_with_exact_objects_and_spans() {
+    let base = "CREATE TABLE app.widgets (id int, \"old😀\" text);
+                CREATE TABLE app.legacy_events (id int);";
+    let sql = concat!(
+        "ALTER TABLE app.widgets ADD COLUMN replacement text, DROP COLUMN \"old😀\";\r\n",
+        "DROP TABLE app.legacy_events;",
+    );
+    let result = candidate(&[base], sql, ExecutionMode::PSQL_FILE_TRANSACTION);
+    assert_eq!(result.coverage.status(), CoverageStatus::Complete);
+    assert_eq!(result.findings.len(), 4);
+
+    for (kind, name, member, command, documentation) in [
+        (
+            ObjectKind::Column,
+            "widgets",
+            Some("old😀"),
+            "DROP COLUMN \"old😀\"",
+            "https://www.postgresql.org/docs/18/sql-altertable.html",
+        ),
+        (
+            ObjectKind::Relation,
+            "legacy_events",
+            None,
+            "DROP TABLE app.legacy_events",
+            "https://www.postgresql.org/docs/18/sql-droptable.html",
+        ),
+    ] {
+        let object = DatabaseObject {
+            kind,
+            schema: Some("app".into()),
+            name: name.into(),
+            member: member.map(str::to_owned),
+        };
+        let finding = |rule: Rule| {
+            result
+                .findings
+                .iter()
+                .find(|finding| {
+                    finding.rule_id == rule.id() && finding.object.as_ref() == Some(&object)
+                })
+                .unwrap()
+        };
+        let loss = finding(Rule::Pg001);
+        let compatibility = finding(Rule::Pg002);
+        assert_eq!(loss.severity, Severity::Critical);
+        assert_eq!(compatibility.severity, Severity::High);
+        assert_eq!(compatibility.confidence, Confidence::High);
+        assert_eq!(compatibility.documentation, documentation);
+        assert_eq!(compatibility.span, loss.span);
+        assert_eq!(&sql[compatibility.span.bytes.as_range()], command);
+        assert_ne!(compatibility.fingerprint, loss.fingerprint);
+    }
+}
+
+#[test]
+fn unresolved_removal_identity_has_medium_compatibility_risk() {
+    let sql = "DROP TABLE IF EXISTS app.known, app.unresolved;
+               ALTER TABLE IF EXISTS app.unknown DROP COLUMN IF EXISTS legacy;";
+    let result = candidate(
+        &["CREATE TABLE app.known (id int);"],
+        sql,
+        ExecutionMode::PSQL_FILE_TRANSACTION,
+    );
+    assert_eq!(result.coverage.status(), CoverageStatus::Complete);
+    assert_eq!(result.findings.len(), 6);
+    for (name, severity) in [
+        ("known", Severity::High),
+        ("unresolved", Severity::Medium),
+        ("unknown", Severity::Medium),
+    ] {
+        assert!(result.findings.iter().any(|finding| {
+            finding.rule_id == Rule::Pg002.id()
+                && finding.severity == severity
+                && finding
+                    .object
+                    .as_ref()
+                    .is_some_and(|object| object.name == name)
+        }));
+    }
+}
+
+#[test]
+fn private_and_conditionally_absent_objects_have_no_removal_compatibility_finding() {
+    let sql = "CREATE TABLE app.transient (id int, obsolete text);
+               INSERT INTO app.transient VALUES (1, 'synthetic');
+               ALTER TABLE app.transient DROP COLUMN obsolete;
+               DROP TABLE app.transient;
+               DROP TABLE IF EXISTS app.transient;
+               ALTER TABLE app.retained DROP COLUMN IF EXISTS nonexistent;
+               TRUNCATE app.retained;";
+    let result = candidate(
+        &["CREATE TABLE app.retained (id int);"],
+        sql,
+        ExecutionMode::PSQL_FILE_TRANSACTION,
+    );
+    assert_eq!(result.coverage.status(), CoverageStatus::Complete);
+    assert_eq!(result.findings.len(), 3);
+    assert!(result.findings.iter().all(|finding| {
+        finding.rule_id == Rule::Pg001.id() && finding.severity == Severity::Critical
+    }));
+}
+
+#[test]
+fn column_removal_uses_identity_at_transaction_entry() {
+    let base = "CREATE TABLE app.retained (id int);";
+    let existing = "CREATE TABLE app.retained (id int, preview text);";
+    let add = "ALTER TABLE app.retained ADD COLUMN IF NOT EXISTS preview text;";
+    let drop = "ALTER TABLE app.retained DROP COLUMN preview;";
+    let file = ExecutionMode::PSQL_FILE_TRANSACTION;
+    let cases = [
+        (base, file, format!("{add} {drop}"), 1, 0),
+        (
+            base,
+            ExecutionMode::PSQL_AUTOCOMMIT,
+            format!("{add} {drop}"),
+            1,
+            1,
+        ),
+        (
+            base,
+            file,
+            format!("SAVEPOINT s; {add} RELEASE s; {drop}"),
+            1,
+            0,
+        ),
+        (
+            base,
+            file,
+            format!(
+                "SAVEPOINT s; {add} ROLLBACK TO s; ALTER TABLE app.retained DROP COLUMN IF EXISTS preview;"
+            ),
+            0,
+            0,
+        ),
+        (
+            existing,
+            file,
+            format!("SAVEPOINT s; {drop} {add} ROLLBACK TO s; {drop}"),
+            2,
+            2,
+        ),
+    ];
+    for (baseline, mode, sql, losses, compatibility) in cases {
+        let result = candidate(&[baseline], &sql, mode);
+        assert_eq!(result.coverage.status(), CoverageStatus::Complete, "{sql}");
+        assert_eq!(result.findings.len(), losses + compatibility, "{sql}");
+        for (rule, severity, count) in [
+            (Rule::Pg001, Severity::Critical, losses),
+            (Rule::Pg002, Severity::High, compatibility),
+        ] {
+            assert_eq!(
+                result
+                    .findings
+                    .iter()
+                    .filter(|finding| finding.rule_id == rule.id() && finding.severity == severity)
+                    .count(),
+                count,
+                "{sql}",
+            );
+        }
+    }
+}
+
+#[test]
 fn rollback_and_savepoints_restore_only_established_constraint_proof() {
     let file = ExecutionMode::PSQL_FILE_TRANSACTION;
     let check = include_str!("../../../../fixtures/dmg-02/inputs/email-check-valid.sql");

@@ -295,18 +295,25 @@ impl Ddl<'_> {
                     {
                         continue;
                     }
-                    let confidence = if table.is_some_and(|table| table.has_column(name)) {
-                        Confidence::High
-                    } else {
-                        Confidence::Medium
-                    };
+                    let established = table.is_some_and(|table| table.has_column(name));
+                    let private = self.schema.is_private(table)
+                        || established
+                            && self
+                                .schema
+                                .was_column_absent_at_block_start(key.as_ref(), name);
+                    let object = member_object(table_object(), ObjectKind::Column, name);
                     self.destructive_with_confidence(
                         span,
-                        member_object(table_object(), ObjectKind::Column, name),
+                        object.clone(),
                         table,
                         *cascade,
-                        confidence,
+                        if established {
+                            Confidence::High
+                        } else {
+                            Confidence::Medium
+                        },
                     );
+                    self.removal_compatibility(span, object, private, established);
                 }
                 AlterChange::SetNotNull { column } => {
                     let proven = table.is_some_and(|table| {
@@ -523,7 +530,13 @@ impl Ddl<'_> {
                     {
                         continue;
                     }
-                    self.destructive(span, object, table, drop.cascade);
+                    self.destructive(span, object.clone(), table, drop.cascade);
+                    self.removal_compatibility(
+                        span,
+                        object,
+                        self.schema.is_private(table),
+                        table.is_some(),
+                    );
                     self.lock(span, relation, RelationLock::AccessExclusive);
                 }
                 ObjectKind::Index => {
@@ -616,13 +629,42 @@ impl Ddl<'_> {
         );
     }
 
+    fn removal_compatibility(
+        &mut self,
+        span: &SourceSpan,
+        object: DatabaseObject,
+        private: bool,
+        established: bool,
+    ) {
+        if self.complete_statement && private {
+            return;
+        }
+        let severity = if self.complete_statement && established {
+            Severity::High
+        } else {
+            Severity::Medium
+        };
+        let is_table = object.kind == ObjectKind::Relation;
+        let explanation = if is_table {
+            "Dropping this table can break clients that still query or write to it."
+        } else {
+            "Dropping this column can break clients that still read or write it."
+        };
+        let target = self.target;
+        let finding = self.compatibility(span, object, severity, explanation);
+        if is_table {
+            finding.documentation =
+                format!("https://www.postgresql.org/docs/{target}/sql-droptable.html");
+        }
+    }
+
     fn compatibility(
         &mut self,
         span: &SourceSpan,
         object: DatabaseObject,
         severity: Severity,
         explanation: &'static str,
-    ) {
+    ) -> &mut Finding {
         self.finding(
             span,
             object,
@@ -635,7 +677,7 @@ impl Ddl<'_> {
                 mitigation: "Use an expand-and-contract rollout and verify clients before removing the old contract.",
                 evidence: "The compatibility prediction uses migration facts. Application dependencies are outside offline evidence.",
             },
-        );
+        )
     }
 
     fn rewrite(
@@ -715,7 +757,7 @@ impl Ddl<'_> {
         );
     }
 
-    fn finding(&mut self, span: &SourceSpan, object: DatabaseObject, risk: Risk) {
+    fn finding(&mut self, span: &SourceSpan, object: DatabaseObject, risk: Risk) -> &mut Finding {
         let finding = record(
             self.finds,
             self.migration,
@@ -741,8 +783,9 @@ impl Ddl<'_> {
             _ if self.target < PostgresTarget::V18 => finding
                 .documentation
                 .replace("/18/", &format!("/{}/", self.target)),
-            _ => return,
+            _ => return finding,
         };
+        finding
     }
 
     fn lock(&mut self, span: &SourceSpan, relation: &RelationName, mode: RelationLock) {

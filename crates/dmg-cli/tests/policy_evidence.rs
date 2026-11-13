@@ -230,13 +230,25 @@ require_complete_schema = true
         findings: vec![selector.clone()],
     });
     fixture.check(43, &[]);
-    let mut approval = approval(selector, now);
-    bundle.approvals.push(approval.clone());
+    let mut destructive_approval = approval(selector, now);
+    bundle.approvals.push(destructive_approval.clone());
     fixture.with_rehearsal(&mut bundle, &report, 41);
 
-    approval.rehearsal_report_sha256 =
+    destructive_approval.rehearsal_report_sha256 =
         Some(ContentDigest::of(&serde_json::to_vec(&report).unwrap()));
-    bundle.approvals[0] = approval;
+    bundle.approvals[0] = destructive_approval;
+    let compatibility = fixture.selector("PG002");
+    let result = fixture.with_rehearsal(&mut bundle, &report, 41);
+    let audit = result.policy_audit().unwrap();
+    assert_eq!(audit.approvals.len(), 1);
+    assert_eq!(audit.approvals[0].rule_id.to_string(), "PG001");
+    assert!(
+        result.decision().unwrap().reasons.iter().any(|reason| {
+            reason.finding_fingerprint == Some(compatibility.finding_fingerprint)
+        })
+    );
+
+    bundle.approvals.push(approval(compatibility, now));
     let result = fixture.with_rehearsal(&mut bundle, &report, 0);
     assert_eq!(
         result
@@ -249,7 +261,7 @@ require_complete_schema = true
     );
     let audit = result.policy_audit().unwrap();
     assert!(audit.baseline_matches.is_empty());
-    assert_eq!(audit.approvals.len(), 1);
+    assert_eq!(audit.approvals.len(), 2);
     assert_eq!(
         audit.rehearsal.as_ref().unwrap().binding_sha256,
         report.binding.digest().unwrap()

@@ -166,6 +166,23 @@ impl Schema {
             })
     }
 
+    pub(super) fn was_column_absent_at_block_start(
+        &self,
+        key: Option<&RelationKey>,
+        name: &str,
+    ) -> bool {
+        let Some((block, key)) = self.block.as_ref().zip(key) else {
+            return false;
+        };
+        // The first retained change stores the relation as it was at block entry.
+        block
+            .undo
+            .iter()
+            .find_map(|layer| layer.before.get(key))
+            .and_then(|relation| relation.as_ref()?.as_deref())
+            .is_some_and(|table| table.column_absent(name))
+    }
+
     pub(super) fn is_new_empty_table(&self, table: Option<&TableFacts>) -> bool {
         self.is_private(table)
             && table.is_some_and(|table| {

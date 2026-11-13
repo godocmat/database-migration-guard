@@ -20,7 +20,7 @@ mod schema;
 mod transaction;
 pub use finding::Rule;
 
-pub const RULESET_VERSION: &str = "1";
+pub const RULESET_VERSION: &str = "2";
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct RuleOptions {

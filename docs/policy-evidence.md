@@ -16,7 +16,7 @@ This example represents the minimum empty bundle. The commit IDs and hashes are 
     "head_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "policy_digest": "1111111111111111111111111111111111111111111111111111111111111111",
     "project_config_digest": "2222222222222222222222222222222222222222222222222222222222222222",
-    "ruleset_version": "1"
+    "ruleset_version": "2"
   }
 }
 ```
@@ -48,6 +48,8 @@ The byte interval is zero-based and half-open. A source edit, relocation, change
 The `baseline` object has `reference_commit` and `findings`. Use a separately reviewed reference commit and exact selectors derived from the findings approved for that reference. The reference may be a reviewed branch distinct from the current Git base. Make the reference commit and its blobs available to the checker. The checker independently reproduces the selected reference findings from Git using the same project configuration and ruleset, then compares each verified entry with the exact current finding and original file bytes. An unavailable reference, incomplete reference analysis, or selector that cannot be reproduced makes the check incomplete. A baseline entry can waive only a noncritical finding's severity threshold.
 
 Each element of the `approvals` array has `finding` (the selector above), `approver`, `justification`, `issued_at_unix_seconds`, and `expires_at_unix_seconds`. Justification is a nonempty single-line string of at most 1,024 bytes. The approval becomes effective at issuance and expires at the specified second. If rehearsal is required for its rule, include `rehearsal_report_sha256` with the exact report pin. The referenced rehearsal must have succeeded and completed by the time the approval was issued.
+
+Approvals apply to individual findings. A table or column drop can produce both PG001 for data loss and PG002 for compatibility. If both findings block under the policy, each needs its own approval or other applicable policy treatment. [Risk rules](rules.md)
 
 ### Rehearsal
 
