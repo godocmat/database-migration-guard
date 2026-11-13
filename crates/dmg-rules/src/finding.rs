@@ -133,6 +133,7 @@ fn fingerprint(
         MigrationAdapter::Sqlx => "sqlx",
     });
     field(&migration.identity.version.to_string());
+    field(span.path.as_str());
     field(&span.bytes.start().to_string());
     field(&span.bytes.end().to_string());
     if let Some(object) = object {

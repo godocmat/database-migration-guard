@@ -214,7 +214,6 @@ dependencies = [
  "dmg-core",
  "dmg-discovery",
  "dmg-postgres",
- "serde",
 ]
 
 [[package]]

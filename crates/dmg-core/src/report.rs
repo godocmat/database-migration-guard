@@ -7,7 +7,7 @@ use crate::{
     coverage::{Coverage, CoverageGap},
     migration::MigrationPlan,
     policy::PolicyDecision,
-    risk::{Finding, Severity},
+    risk::{Finding, RelationLockObservation, Severity},
     schema::SchemaVersionV1,
     target::PostgresTarget,
 };
@@ -24,6 +24,8 @@ pub struct ReportV1 {
     severity_summary: SeveritySummary,
     findings: Vec<Finding>,
     decision: Option<PolicyDecision>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    relation_locks: Vec<RelationLockObservation>,
 }
 
 impl ReportV1 {
@@ -58,7 +60,15 @@ impl ReportV1 {
             severity_summary,
             findings,
             decision,
+            relation_locks: Vec::new(),
         }
+    }
+
+    pub fn with_relation_locks(mut self, mut locks: Vec<RelationLockObservation>) -> Self {
+        locks.sort();
+        locks.dedup();
+        self.relation_locks = locks;
+        self
     }
 
     pub fn from_json(input: &str) -> Result<Self, ReportFormatError> {
@@ -87,6 +97,10 @@ impl ReportV1 {
 
     pub fn decision(&self) -> Option<&PolicyDecision> {
         self.decision.as_ref()
+    }
+
+    pub fn relation_locks(&self) -> &[RelationLockObservation] {
+        &self.relation_locks
     }
 }
 

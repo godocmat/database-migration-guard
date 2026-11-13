@@ -9,7 +9,6 @@ publish.workspace = true
 [dependencies]
 dmg-core = { path = "../dmg-core" }
 dmg-postgres = { path = "../dmg-postgres" }
-serde.workspace = true
 
 [dev-dependencies]
 dmg-discovery = { path = "../dmg-discovery" }
