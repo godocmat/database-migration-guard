@@ -367,6 +367,9 @@ pub struct RehearsalStatementV1 {
     pub span: SourceSpan,
     pub state: RehearsalStatementState,
     pub durability: Option<RehearsalDurability>,
+    /// Client-observed command completion time since the group was sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elapsed_millis: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]

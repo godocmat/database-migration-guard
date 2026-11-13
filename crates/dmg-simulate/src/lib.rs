@@ -9,6 +9,14 @@ use std::{
 use dmg_core::inspection::InspectionScope;
 use thiserror::Error;
 
+mod rehearsal;
+
+pub use dmg_core::rehearsal::{RehearsalBindingV1, RehearsalOutcome, RehearsalReportV1, SeedKind};
+pub use rehearsal::{
+    MAX_REHEARSAL_SETUP_BYTES, PreparedRehearsal, RehearsalContext, RehearsalInput,
+    RehearsalPlanError, expected_rehearsal_plan, prepare_rehearsal, run_rehearsal,
+};
+
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod linux;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]

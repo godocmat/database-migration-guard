@@ -8,13 +8,22 @@ publish.workspace = true
 
 [dependencies]
 dmg-core = { path = "../dmg-core" }
+dmg-discovery = { path = "../dmg-discovery" }
+dmg-postgres = { path = "../dmg-postgres" }
+serde_json.workspace = true
 thiserror.workspace = true
 
 [target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
+bytes = "=1.12.1"
+dmg-inspect = { path = "../dmg-inspect" }
+fallible-iterator = "=0.2.0"
 getrandom = "=0.4.3"
+postgres-protocol = "=0.6.12"
 serde.workspace = true
-serde_json.workspace = true
 tempfile = "=3.27.0"
 tokio = { version = "=1.54.1", features = ["macros", "rt", "process", "time", "io-util"] }
 tokio-postgres = "=0.7.18"
 zeroize = "=1.9.1"
+
+[dev-dependencies]
+tempfile = "=3.27.0"

@@ -493,8 +493,14 @@ dependencies = [
 name = "dmg-simulate"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "dmg-core",
+ "dmg-discovery",
+ "dmg-inspect",
+ "dmg-postgres",
+ "fallible-iterator",
  "getrandom 0.4.3",
+ "postgres-protocol",
  "serde",
  "serde_json",
  "tempfile",
