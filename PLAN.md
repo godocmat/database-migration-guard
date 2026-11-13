@@ -306,7 +306,9 @@ Review requirements, run relevant checks, fix failures, update documentation, an
 
 DMG-03 is integrated. The Rust 1.100.0 workspace pins the build and versions its source, migration, policy, and report contracts. Native Windows x64 and Linux x64 passed the local build, Clippy, and six contract tests. Hosted CI and macOS arm64 are pending. [Foundation evidence](PROGRESS.md#dmg-03-workspace-foundation) · [Shared contracts](DECISIONS.md)
 
-DMG-04 is integrated. The discovery library preserves source bytes and ordered inventory for plain SQL and SQLx 0.8.6. It supports exact local Git comparisons and pinned integrity and applied-history manifests. Windows passed ten focused tests and worktree and Git comparisons across 24 distinct development recipes. [Migration formats and verification](docs/migration-formats.md)
+DMG-04 is integrated. The discovery library preserves source bytes and ordered inventory for plain SQL and SQLx 0.8.6. It supports exact local Git comparisons and pinned integrity and applied-history manifests. Windows and Linux passed focused tests and worktree and Git comparisons across 24 distinct development recipes. [Migration formats and verification](docs/migration-formats.md)
+
+DMG-05 is integrated. The parser normalizes the supported PostgreSQL 17–18 operations and preserves original source ranges and incomplete coverage. The Windows suite passed all twelve parser tests, including the LF and CRLF controls, target-version constraint cases, and malformed and unsupported SQL. [Supported SQL and parser limits](docs/postgresql-support.md)
 
 ## 19. Risk register
 
