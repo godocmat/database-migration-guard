@@ -1,0 +1,7 @@
+schema_version = 1
+deny_at = "high"
+
+[integrity]
+require_git_base = true
+deny_modified = true
+deny_missing = true
