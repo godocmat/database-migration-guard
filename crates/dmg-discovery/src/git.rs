@@ -178,7 +178,11 @@ fn collect_file(
     batch: &mut Batch,
     inventory: &mut Inventory,
 ) {
-    if entry.kind == EntryKind::Tree && !matches!(options.adapter, crate::Adapter::Flyway(_)) {
+    let flyway = matches!(options.adapter, crate::Adapter::Flyway(_));
+    if entry.kind == EntryKind::Tree
+        && !flyway
+        && !options.adapter.check_goose_directory(entry.path)
+    {
         return;
     }
     let Some(filename) = std::str::from_utf8(entry.path)
@@ -203,11 +207,11 @@ fn collect_file(
         ));
         return;
     };
-    if entry.kind == EntryKind::Tree {
+    if entry.kind == EntryKind::Tree && flyway {
         crate::flyway::check_child_root(inventory, options, &path);
         return;
     }
-    if entry.kind == EntryKind::Symlink && matches!(options.adapter, crate::Adapter::Flyway(_)) {
+    if entry.kind == EntryKind::Symlink && flyway {
         inventory.gaps.push(coverage_gap(
             CoverageGapKind::InvalidPath,
             Some(&path),

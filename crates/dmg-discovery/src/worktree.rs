@@ -106,7 +106,7 @@ fn collect_file(
     let metadata = directory.symlink_metadata(filename);
     let is_directory = metadata.as_ref().is_ok_and(cap_std::fs::Metadata::is_dir);
     let flyway = matches!(options.adapter, crate::Adapter::Flyway(_));
-    if is_directory && !flyway {
+    if is_directory && !flyway && !options.adapter.check_goose_directory(filename.as_bytes()) {
         return;
     }
     let Some(path) = RepoPath::new(format!("{root}/{filename}"))
@@ -120,7 +120,7 @@ fn collect_file(
         ));
         return;
     };
-    if is_directory {
+    if is_directory && flyway {
         crate::flyway::check_child_root(inventory, options, &path);
         return;
     }

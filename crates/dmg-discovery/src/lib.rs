@@ -2,6 +2,7 @@
 
 mod flyway;
 mod git;
+mod goose;
 mod integrity;
 mod manifest;
 mod sqlx;
@@ -120,8 +121,8 @@ impl DiscoveryOptions {
         }
         roots.sort();
         roots.dedup();
-        if matches!(adapter, Adapter::Supabase) && roots.len() != 1 {
-            return Err(DiscoveryConfigError::SupabaseRootCount);
+        if matches!(adapter, Adapter::Goose | Adapter::Supabase) && roots.len() != 1 {
+            return Err(DiscoveryConfigError::SingleRootRequired);
         }
         if limits.max_entries == 0
             || limits.max_file_bytes == 0
@@ -170,8 +171,8 @@ impl Default for DiscoveryLimits {
 
 #[derive(Debug, Error)]
 pub enum DiscoveryConfigError {
-    #[error("Supabase discovery requires exactly one migration root")]
-    SupabaseRootCount,
+    #[error("the selected adapter requires exactly one migration root")]
+    SingleRootRequired,
     #[error("expected at least one portable repository-relative migration root")]
     InvalidRoots,
     #[error("invalid migration entry or byte limits")]
@@ -191,6 +192,7 @@ pub enum Adapter {
     Plain(PlainSql),
     Sqlx(SqlxLayout),
     Flyway(FlywaySettings),
+    Goose,
     Supabase,
 }
 
@@ -292,11 +294,17 @@ impl SourceLayout {
 }
 
 impl Adapter {
+    // Goose's filename glob also returns directories with a matching suffix.
+    fn check_goose_directory(&self, name: &[u8]) -> bool {
+        matches!(self, Self::Goose) && (name.ends_with(b".sql") || name.ends_with(b".go"))
+    }
+
     fn kind(&self) -> MigrationAdapter {
         match self {
             Self::Plain(_) => MigrationAdapter::Plain,
             Self::Sqlx(_) => MigrationAdapter::Sqlx,
             Self::Flyway(_) => MigrationAdapter::Flyway,
+            Self::Goose => MigrationAdapter::Goose,
             Self::Supabase => MigrationAdapter::Supabase,
         }
     }
@@ -306,6 +314,7 @@ impl Adapter {
             Self::Plain(plain) => plain,
             Self::Sqlx(layout) => return layout.candidate(filename),
             Self::Flyway(_) => return flyway::candidate(filename),
+            Self::Goose => return goose::candidate(filename),
             Self::Supabase => return supabase::candidate(filename),
         };
         let Some(captures) = plain.filename_pattern.captures(filename) else {
@@ -344,6 +353,7 @@ impl Adapter {
             Self::Flyway(settings) => {
                 return flyway::source_layout(*settings, candidate, path, bytes);
             }
+            Self::Goose => return goose::source_layouts(path, bytes),
         };
         (
             vec![SourceLayout::whole_file(

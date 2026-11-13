@@ -433,6 +433,34 @@ fn flyway_resolves_versions_repeatables_and_transaction_settings() {
 }
 
 #[test]
+fn goose_reports_shared_directional_bytes_and_runner_query_groups() {
+    let project = Fixture::new();
+    project.write(
+        "migrations/001_create.sql",
+        "-- +goose Up\nCREATE TABLE public.items (id integer);\n\
+         -- +goose Down\nDROP TABLE public.items;\n",
+    );
+    project.write(
+        "migrations/002_index.sql",
+        "-- +goose NO TRANSACTION\n-- +goose Up\n\
+         ALTER TABLE public.items ADD COLUMN note text; CREATE INDEX CONCURRENTLY items_idx ON public.items (id);\n",
+    );
+    project.write("dmg.toml", native_config("goose", ""));
+    let checked = project.check();
+    assert_exit(&checked, 1);
+    let report = report(&checked);
+    let files = report["migrations"]["inventory"].as_array().unwrap();
+    assert_eq!(files.len(), 3);
+    assert_eq!(files[0]["direction"], "forward");
+    assert_eq!(files[1]["direction"], "down");
+    assert_eq!(files[0]["digest"], files[1]["digest"]);
+    assert_eq!(files[0]["path"], files[1]["path"]);
+    assert_eq!(files[2]["source_segments"].as_array().unwrap().len(), 1);
+    assert_eq!(report["findings"][0]["rule_id"], "PG007");
+    assert_eq!(report["findings"][0]["span"]["start"]["line"], 3);
+}
+
+#[test]
 fn supabase_keeps_lexical_versions_and_preserves_native_batch_boundaries() {
     let project = Fixture::new();
     fs::remove_file(project.path("migrations/001_create.sql")).unwrap();

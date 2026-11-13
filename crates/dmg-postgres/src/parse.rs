@@ -13,7 +13,7 @@ use dmg_core::{
 use pg_query::protobuf::{RawStmt, Token};
 
 use crate::{
-    ParsedMigration, ParsedPlan, Statement,
+    Operation, ParsedMigration, ParsedPlan, Statement,
     normalize::{Normalizer, node},
     version::VersionContext,
 };
@@ -137,6 +137,7 @@ fn parse_file(
             number: segment,
             delivery: file.execution.statement_delivery,
             sql: &text[range.as_range()],
+            goose: file.identity.adapter == MigrationAdapter::Goose,
             gaps: &mut gaps,
             statements: &mut parsed.statements,
         };
@@ -232,6 +233,7 @@ struct SegmentParser<'a, 'source> {
     number: usize,
     delivery: StatementDelivery,
     sql: &'source str,
+    goose: bool,
     gaps: &'a mut Vec<CoverageGap>,
     statements: &'a mut Vec<Statement>,
 }
@@ -335,6 +337,14 @@ impl<'source> SegmentParser<'_, 'source> {
             previous_end = range.end;
             if matches!(raw.token(), Token::SqlComment | Token::CComment) {
                 continue;
+            }
+            if self.goose && text.contains("\r\n") {
+                self.gap(
+                    range,
+                    CoverageGapKind::UnsupportedInput,
+                    "Goose normalizes CRLF inside this SQL token before execution",
+                );
+                return None;
             }
             let control = if text == "\\" {
                 Some((
@@ -490,12 +500,20 @@ impl<'source> SegmentParser<'_, 'source> {
             base: self.base,
             gaps: self.gaps,
         };
-        let operation = normalizer.statement(
+        let mut operation = normalizer.statement(
             raw.stmt.as_deref().and_then(node),
             tokens,
             origin,
             &location,
         );
+        if self.goose && matches!(operation, Operation::Transaction(_)) {
+            self.gaps.push(span_gap(
+                location.clone(),
+                CoverageGapKind::UnresolvedTransactionMode,
+                "authored transaction commands can change Goose driver transaction state",
+            ));
+            operation = Operation::Unsupported;
+        }
         self.statements.push(Statement {
             span: location,
             segment: self.number,

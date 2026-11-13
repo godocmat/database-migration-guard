@@ -48,6 +48,7 @@ enum AdapterFile {
         #[serde(default = "default_enabled")]
         transactional_lock: bool,
     },
+    Goose,
     Supabase,
 }
 
@@ -160,6 +161,7 @@ impl Project {
                 mixed,
                 transactional_lock,
             }),
+            AdapterFile::Goose => Adapter::Goose,
             AdapterFile::Supabase => Adapter::Supabase,
         };
         Ok(Self {

@@ -214,6 +214,220 @@ fn sqlx(layout: dmg_discovery::SqlxLayout) -> DiscoveryOptions {
     .unwrap()
 }
 
+fn goose() -> DiscoveryOptions {
+    DiscoveryOptions::new(
+        vec![RepoPath::new("migrations").unwrap()],
+        Adapter::Goose,
+        DiscoveryLimits::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn goose_tracks_shared_directional_ranges_and_native_order() {
+    use dmg_core::migration::{
+        MigrationAdapter, MigrationDirection, StatementDelivery, TransactionWrapper,
+    };
+
+    let repo = TestRepo::new().unwrap();
+    let forward = "SELECT 'é;🧪';";
+    let grouped = "SELECT 2;\r\nSELECT 3";
+    let down = "SELECT 4;";
+    let sql = format!(
+        "-- heading\r\n-- +goose UP\r\n\r\n  {forward}\r\n-- +goose StatementBegin\r\n{grouped}\r\n-- +goose StatementEnd\r\n-- +goose Down\r\n-- +goose no transaction\r\n{down}\r\n",
+    );
+    repo.write("migrations/10_sections.sql", sql.as_bytes());
+    repo.write("migrations/+3_.sql", b"-- +goose Up\n");
+    repo.write("migrations/02_base.sql", b"-- +goose Up\nSELECT 1;\n");
+    repo.write("migrations/4_ignored.SQL", b"not a migration");
+    repo.write("migrations/archive/1_ignored.sql", b"not a migration");
+    repo.write("migrations/5_test.go", b"not a migration");
+    repo.write("migrations/helpers.go", b"not a migration");
+
+    let discovery = discover_worktree(&repo.0, &goose());
+    assert_eq!(discovery.plan.coverage.status(), CoverageStatus::Complete);
+    let inventory = &discovery.plan.inventory;
+    let selected = discovery.plan.selected_forwards.as_ref().unwrap();
+    assert_eq!(
+        selected.iter().map(RepoPath::as_str).collect::<Vec<_>>(),
+        [
+            "migrations/02_base.sql",
+            "migrations/+3_.sql",
+            "migrations/10_sections.sql",
+        ]
+    );
+    assert_eq!(
+        inventory
+            .iter()
+            .map(|file| (
+                file.identity.adapter,
+                file.identity.version.as_numeric().unwrap(),
+                file.direction
+            ))
+            .collect::<Vec<_>>(),
+        [
+            (MigrationAdapter::Goose, 2, MigrationDirection::Forward),
+            (MigrationAdapter::Goose, 3, MigrationDirection::Forward),
+            (MigrationAdapter::Goose, 10, MigrationDirection::Forward),
+            (MigrationAdapter::Goose, 10, MigrationDirection::Down),
+        ]
+    );
+    assert!(inventory[1].source_segments[0].is_empty());
+    assert_eq!(
+        inventory[0].execution.transaction_wrapper,
+        TransactionWrapper::File
+    );
+    for (file, queries) in [
+        (&inventory[2], vec![forward, grouped]),
+        (&inventory[3], vec![down]),
+    ] {
+        assert_eq!(file.digest, ContentDigest::of(sql.as_bytes()));
+        assert_eq!(discovery.source(&file.path), Some(sql.as_str()));
+        assert_eq!(file.execution.transaction_wrapper, TransactionWrapper::None);
+        assert_eq!(
+            file.execution.statement_delivery,
+            StatementDelivery::SingleQuery
+        );
+        assert_eq!(
+            file.source_segments
+                .iter()
+                .map(|span| &sql[span.as_range()])
+                .collect::<Vec<_>>(),
+            queries,
+        );
+    }
+}
+
+#[test]
+fn goose_compares_both_directions_when_only_down_changes_in_git() {
+    use dmg_core::migration::{IntegrityStatus, MigrationDirection};
+
+    let repo = TestRepo::new().unwrap();
+    init_git(&repo.0);
+    let path = "migrations/1_both.sql";
+    let base_sql = b"-- +goose Up\r\nSELECT 1;\r\n-- +goose Down\r\nSELECT 2;\r\n";
+    let head_sql = b"-- +goose Up\r\nSELECT 1;\r\n-- +goose Down\r\nSELECT 3;\r\n";
+    repo.write(path, base_sql);
+    let base = commit(&repo.0, "base");
+    repo.write(path, head_sql);
+    let head = commit(&repo.0, "head");
+    repo.write(path, b"untracked working bytes");
+
+    let revisions = dmg_discovery::GitRevisions::new(&base, &head).unwrap();
+    let discovery = dmg_discovery::discover_git(&repo.0, &revisions, &goose());
+    let selected = discovery.plan.selected_forwards.as_ref().unwrap();
+    assert_eq!(selected, &[RepoPath::new(path).unwrap()]);
+    assert_eq!(
+        discovery.source_bytes(&selected[0]),
+        Some(head_sql.as_slice())
+    );
+    let changes = &discovery.plan.integrity.as_ref().unwrap().changes;
+    assert_eq!(changes.len(), 2);
+    assert_eq!(changes[0].direction, MigrationDirection::Forward);
+    assert_eq!(changes[1].direction, MigrationDirection::Down);
+    for change in changes {
+        assert_eq!(change.status, IntegrityStatus::Modified);
+        assert_eq!(
+            change.before.as_ref().unwrap().digest,
+            ContentDigest::of(base_sql)
+        );
+        assert_eq!(
+            change.after.as_ref().unwrap().digest,
+            ContentDigest::of(head_sql)
+        );
+    }
+}
+
+#[test]
+fn goose_rejects_unsupported_scripts_and_ambiguous_versions() {
+    use dmg_core::coverage::DiagnosticScope;
+    use dmg_discovery::DiscoveryConfigError;
+
+    let repo = TestRepo::new().unwrap();
+    let options = goose();
+    for (name, source) in [
+        (
+            "1_envsub.sql",
+            "-- +goose Up\n-- +goose ENVSUB ON\nSELECT 1;\n",
+        ),
+        (
+            "1_unknown.sql",
+            "-- +goose Up\n-- +goose SomethingElse\nSELECT 1;\n",
+        ),
+        ("1_indented.sql", " -- +goose Up\nSELECT 1;\n"),
+        ("1_bom.sql", "\u{feff}-- +goose Up\nSELECT 1;\n"),
+        (
+            "1_unclosed.sql",
+            "-- +goose Up\n-- +goose StatementBegin\nSELECT 1;\n",
+        ),
+        (
+            "1_empty_group.sql",
+            "-- +goose Up\n-- +goose StatementBegin\n-- +goose StatementEnd\nSELECT 1;\n",
+        ),
+        (
+            "1_unfinished.sql",
+            "-- +goose Up\nSELECT 1\n-- +goose Down\n",
+        ),
+        (
+            "1_noncontiguous.sql",
+            "-- +goose Up\nSELECT\n-- +goose NO TRANSACTION\n1;\n",
+        ),
+    ] {
+        let path = format!("migrations/{name}");
+        repo.write(&path, source.as_bytes());
+        let discovery = discover_worktree(&repo.0, &options);
+        assert!(discovery.plan.selected_forwards.is_none(), "{name}");
+        let gaps = discovery.plan.coverage.gaps();
+        assert_eq!(gaps.len(), 1, "{name}");
+        assert_eq!(gaps[0].kind, CoverageGapKind::UnsupportedInput, "{name}");
+        assert!(
+            matches!(&gaps[0].scope, DiagnosticScope::Span { span } if span.path.as_str() == path)
+        );
+        fs::remove_file(repo.0.join(path)).unwrap();
+    }
+    let valid = b"-- +goose Up\nSELECT 1;\n";
+    for path in [
+        "migrations/02_alias.sql",
+        "migrations/+2_alias.sql",
+        "migrations/0_zero.sql",
+        "migrations/3_unregistered.go",
+        "migrations/4_dir.sql/nested.txt",
+    ] {
+        repo.write(path, valid);
+    }
+    let discovery = discover_worktree(&repo.0, &options);
+    assert!(discovery.plan.selected_forwards.is_none());
+    let gaps = discovery.plan.coverage.gaps();
+    assert_eq!(
+        gaps.iter()
+            .filter(|gap| gap.kind == CoverageGapKind::AmbiguousIdentity)
+            .count(),
+        1
+    );
+    assert_eq!(
+        gaps.iter()
+            .filter(|gap| gap.kind == CoverageGapKind::UnsupportedInput)
+            .count(),
+        2
+    );
+    assert_eq!(
+        gaps.iter()
+            .filter(|gap| gap.kind == CoverageGapKind::InvalidPath)
+            .count(),
+        1
+    );
+
+    let multi_root = DiscoveryOptions::new(
+        vec![RepoPath::new("a").unwrap(), RepoPath::new("b").unwrap()],
+        Adapter::Goose,
+        DiscoveryLimits::default(),
+    );
+    assert!(matches!(
+        multi_root,
+        Err(DiscoveryConfigError::SingleRootRequired)
+    ));
+}
+
 #[test]
 fn git_compares_raw_bytes_and_keeps_unchanged_head_sources() {
     use dmg_core::migration::IntegrityStatus::{Missing, Modified, New, Unchanged};
