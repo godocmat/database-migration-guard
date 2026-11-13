@@ -43,11 +43,11 @@ def child_env(home):
     return env
 
 
-def git(root, *args, timeout=20, fetch_token=None, capture=True):
-    env = child_env(root / "home")
+def git(root, *args, timeout=20, fetch_token=None, local_fetch=False, capture=True):
+    env = child_env(root.parent / "home")
     env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
                GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0", GIT_NO_LAZY_FETCH="1",
-               GIT_ALLOW_PROTOCOL="https" if fetch_token else "")
+               GIT_ALLOW_PROTOCOL="file" if local_fetch else "https" if fetch_token else "")
     if fetch_token:
         auth = base64.b64encode(f"x-access-token:{fetch_token}".encode("ascii")).decode("ascii")
         env.update(GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="http.extraHeader",
@@ -101,10 +101,13 @@ def protected_blob(repo, base, path):
             "Use a portable repository-relative path for each protected input.")
     listing = git(repo, "ls-tree", "--full-tree", "-z", base, "--", path)
     fields, separator, name = listing.partition(b"\t")
-    mode, kind, oid = (fields.split() + [b"", b"", b""])[:3]
-    require(separator and name == path.encode("ascii") + b"\0" and kind == b"blob"
+    parts = fields.split()
+    require(len(parts) == 3 and separator and name == path.encode("ascii") + b"\0",
+            "A protected config or policy file is missing from the base commit.")
+    mode, kind, oid = parts
+    require(kind == b"blob"
             and mode in {b"100644", b"100755"},
-            "A protected config or policy file is missing or is not an ordinary blob.")
+            "A protected config or policy file must be an ordinary Git blob.")
     object_id = oid.decode("ascii")
     require(SHA.fullmatch(object_id), "Invalid object ID for a protected input.")
     size = int(git(repo, "cat-file", "-s", object_id))
@@ -138,6 +141,23 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def fetch_merge(repo, remote, revision, *, token=None, local=False):
+    git(repo, "init", "--bare", "--quiet")
+    ref = f"refs/pull/{revision['pull_request']}/merge:refs/dmg/test-merge"
+    git(repo, "-c", "http.followRedirects=false", "fetch", "--quiet", "--depth=2", "--no-tags",
+        "--no-recurse-submodules", "--no-auto-maintenance", "--no-write-fetch-head", remote, ref,
+        timeout=120, fetch_token=token, local_fetch=local, capture=False)
+    verify_merge(repo, revision)
+
+
+def save_protected_inputs(directory, repo, revision, config_path, policy_path):
+    for role, source_path in (("config", config_path), ("policy", policy_path)):
+        content = protected_blob(repo, revision["base_commit"], source_path)
+        (directory / f"{role}.toml").write_bytes(content)
+        revision[f"{role}_path"] = source_path
+        revision[f"{role}_sha256"] = hashlib.sha256(content).hexdigest()
+
+
 def prepare(environ):
     require(environ.get("RUNNER_OS") == "Linux" and environ.get("RUNNER_ARCH") == "X64",
             "The hosted pilot expects a Linux x86-64 runner.")
@@ -149,20 +169,9 @@ def prepare(environ):
     repo.mkdir()
     token = environ["DMG_FETCH_TOKEN"]
     require(token, "The workflow needs its built-in read-only token for the object fetch.")
-    git(repo, "init", "--bare", "--quiet")
     remote = f"https://github.com/{revision['repository']}.git"
-    ref = f"refs/pull/{revision['pull_request']}/merge:refs/dmg/test-merge"
-    git(repo, "-c", "http.followRedirects=false", "fetch", "--quiet", "--depth=2", "--no-tags",
-        "--no-recurse-submodules", "--no-auto-maintenance", "--no-write-fetch-head", remote, ref,
-        timeout=120, fetch_token=token, capture=False)
-    verify_merge(repo, revision)
-
-    for role in ("config", "policy"):
-        source_path = environ[f"DMG_{role.upper()}_PATH"]
-        content = protected_blob(repo, revision["base_commit"], source_path)
-        (directory / f"{role}.toml").write_bytes(content)
-        revision[f"{role}_path"] = source_path
-        revision[f"{role}_sha256"] = hashlib.sha256(content).hexdigest()
+    fetch_merge(repo, remote, revision, token=token)
+    save_protected_inputs(directory, repo, revision, environ["DMG_CONFIG_PATH"], environ["DMG_POLICY_PATH"])
     revision["binary_sha256"] = environ["DMG_BINARY_SHA256"]
     binary = download_binary(directory, environ["DMG_BINARY_URL"], revision["binary_sha256"])
     revision["binary_name"] = binary.name
