@@ -392,6 +392,46 @@ layout = "simple"
     assert!(!text.contains('\u{202e}'), "{text}");
 }
 
+#[test]
+fn supabase_keeps_lexical_versions_and_preserves_native_batch_boundaries() {
+    let project = Fixture::new();
+    fs::remove_file(project.path("migrations/001_create.sql")).unwrap();
+    project.write(
+        "migrations/01_base.sql",
+        "CREATE TABLE public.items (id integer);\n",
+    );
+    project.write("migrations/2_last.sql", "SELECT 1;\n");
+    project.write("dmg.toml", native_config("supabase", ""));
+    let prefix = "ALTER TABLE public.items ADD COLUMN note text;\n";
+    project.write(
+        "migrations/10_index.sql",
+        format!("{prefix}CREATE INDEX CONCURRENTLY items_idx ON public.items (id);\n"),
+    );
+    let checked = project.check();
+    assert_exit(&checked, 0);
+    let data = report(&checked);
+    let files = data["migrations"]["inventory"].as_array().unwrap();
+    let versions = files
+        .iter()
+        .map(|file| file["identity"]["version"]["value"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(versions, ["01", "10", "2"]);
+
+    project.write(
+        "migrations/10_index.sql",
+        format!("{prefix}CREATE /* internal comment */ INDEX CONCURRENTLY items_idx ON public.items (id);\n"),
+    );
+    let checked = project.check();
+    assert_exit(&checked, 1);
+    assert_eq!(report(&checked)["findings"][0]["rule_id"], "PG007");
+}
+
+fn native_config(adapter: &str, settings: &str) -> String {
+    format!(
+        "schema_version = 1\ntarget = 18\nroots = [\"migrations\"]\n[adapter]\nkind = \"{adapter}\"\n{settings}"
+    )
+}
+
 struct Fixture(TempDir);
 
 impl Fixture {

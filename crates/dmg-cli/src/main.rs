@@ -16,6 +16,7 @@ use config::{ExitCodes, Project};
 use dmg_core::{
     coverage::{Coverage, CoverageGap, CoverageGapKind, CoverageStatus, DiagnosticScope},
     digest::ContentDigest,
+    migration::MigrationDirection,
     policy::DecisionStatus,
     report::{ReportMetadata, ReportV1},
     target::PostgresTarget,
@@ -266,6 +267,16 @@ fn run_analysis(args: AnalysisArgs, policy: Option<&ValidatedPolicy>) -> Result<
     let plan = parse_plan(&discovery.plan, project.target, |path| {
         discovery.source_bytes(path)
     });
+    // parse_plan returns one entry for each forward in inventory order.
+    for (file, parsed) in discovery
+        .plan
+        .inventory
+        .iter_mut()
+        .filter(|file| file.direction == MigrationDirection::Forward)
+        .zip(&plan.migrations)
+    {
+        file.execution = parsed.execution;
+    }
     let Analysis {
         coverage,
         mut findings,

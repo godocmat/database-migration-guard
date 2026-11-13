@@ -40,6 +40,7 @@ enum AdapterFile {
     Sqlx {
         layout: SqlxLayoutFile,
     },
+    Supabase,
 }
 
 #[derive(Deserialize)]
@@ -142,6 +143,7 @@ impl Project {
                 SqlxLayoutFile::Simple => SqlxLayout::Simple,
                 SqlxLayoutFile::Reversible => SqlxLayout::Reversible,
             }),
+            AdapterFile::Supabase => Adapter::Supabase,
         };
         Ok(Self {
             target: file.target,
