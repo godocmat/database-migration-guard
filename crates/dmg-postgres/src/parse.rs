@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, sync::Mutex};
 
 use dmg_core::{
     coverage::{Coverage, CoverageGap, CoverageGapKind, DiagnosticScope},
@@ -20,6 +20,24 @@ const MAX_SEGMENT_BYTES: usize = 256 * 1024;
 const MAX_TOKENS: usize = 32_768;
 const MAX_DELIMITER_DEPTH: usize = 64;
 const MAX_STATEMENTS: usize = 2_048;
+const MAX_SEGMENTS: usize = 1_024;
+
+// The pinned native parser temporarily redirects process-wide stderr.
+static NATIVE_PARSE: Mutex<()> = Mutex::new(());
+
+fn native_parse(sql: &str) -> pg_query::Result<pg_query::ParseResult> {
+    let _guard = NATIVE_PARSE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    pg_query::parse(sql, pg_query::ParserOptions::default())
+}
+
+fn scan(sql: &str) -> pg_query::Result<Vec<pg_query::protobuf::ScanToken>> {
+    let _guard = NATIVE_PARSE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    pg_query::scan(sql).map(|scan| scan.tokens)
+}
 
 pub fn parse_migration(
     file: &MigrationFile,
@@ -71,8 +89,8 @@ fn parse_file(
     }
     let text = match source_text(file, bytes) {
         Ok(text) => text,
-        Err(gap) => {
-            parsed.coverage = Coverage::from_gaps(vec![gap]);
+        Err((kind, message)) => {
+            parsed.coverage = Coverage::from_gaps(vec![path_gap(&file.path, kind, message)]);
             versions.clear();
             return parsed;
         }
@@ -86,8 +104,21 @@ fn parse_file(
             "migration has no declared forward source segments",
         ));
     }
+    if file.source_segments.len() > MAX_SEGMENTS {
+        gaps.push(path_gap(
+            &file.path,
+            CoverageGapKind::InputLimitExceeded,
+            "migration exceeds the parser segment count limit",
+        ));
+    }
     let mut previous_end = 0;
-    for (segment, range) in file.source_segments.iter().copied().enumerate() {
+    for (segment, range) in file
+        .source_segments
+        .iter()
+        .copied()
+        .take(MAX_SEGMENTS)
+        .enumerate()
+    {
         if range.start() < previous_end || text.get(range.as_range()).is_none() {
             gaps.push(path_gap(
                 &file.path,
@@ -108,43 +139,36 @@ fn parse_file(
         segment_parser.parse();
         previous_end = range.end();
     }
-    let source_complete = gaps.is_empty();
-    if !source_complete {
-        versions.clear();
-    }
-    versions.check(target, &parsed.statements, &mut gaps);
-    if !gaps.is_empty() {
-        versions.clear();
-    }
+    let syntax_complete = gaps.is_empty();
+    versions.check(target, &parsed, &mut gaps, syntax_complete);
     parsed.coverage = Coverage::from_gaps(gaps);
     parsed
 }
 
-fn source_text<'a>(file: &MigrationFile, bytes: Option<&'a [u8]>) -> Result<&'a str, CoverageGap> {
+fn source_text<'a>(
+    file: &MigrationFile,
+    bytes: Option<&'a [u8]>,
+) -> Result<&'a str, (CoverageGapKind, &'static str)> {
     let Some(bytes) = bytes else {
-        return Err(path_gap(
-            &file.path,
+        return Err((
             CoverageGapKind::UnreadableInput,
             "original migration bytes are unavailable",
         ));
     };
     if bytes.len() > MAX_FILE_BYTES {
-        return Err(path_gap(
-            &file.path,
+        return Err((
             CoverageGapKind::InputLimitExceeded,
             "migration exceeds the parser file size limit",
         ));
     }
     if ContentDigest::of(bytes) != file.digest {
-        return Err(path_gap(
-            &file.path,
+        return Err((
             CoverageGapKind::UnreadableInput,
             "migration bytes do not match the discovered digest",
         ));
     }
     std::str::from_utf8(bytes).map_err(|_| {
-        path_gap(
-            &file.path,
+        (
             CoverageGapKind::UnsupportedInput,
             "migration is not valid UTF-8",
         )
@@ -175,7 +199,6 @@ pub(crate) fn span(map: &SourceMap<'_>, base: usize, range: Range<usize>) -> Opt
     map.span(range).ok()
 }
 
-#[derive(Clone)]
 pub(crate) struct SqlToken<'sql> {
     pub text: &'sql str,
     pub range: Range<usize>,
@@ -232,7 +255,12 @@ impl<'source> SegmentParser<'_, 'source> {
             return;
         }
         if self.sql.trim_start().starts_with('\\') {
-            self.segment_gap(
+            let start = self.sql.len() - self.sql.trim_start().len();
+            let end = self.sql[start..]
+                .find(['\r', '\n'])
+                .map_or(self.sql.len(), |len| start + len);
+            self.gap(
+                start..end,
                 CoverageGapKind::UnsupportedSql,
                 "client directives require runner interpretation",
             );
@@ -245,14 +273,14 @@ impl<'source> SegmentParser<'_, 'source> {
             return;
         }
 
-        match pg_query::parse(self.sql, pg_query::ParserOptions::default()) {
-            Ok(result) => self.normalize_batch(&result.protobuf.stmts, &tokens),
+        match native_parse(self.sql) {
+            Ok(result) => self.normalize_batch(&result.protobuf.stmts, &tokens, self.sql.len()),
             Err(_) => self.recover(&tokens),
         }
     }
 
     fn scan(&mut self) -> Option<Vec<SqlToken<'source>>> {
-        let scanned = match pg_query::scan_tokens(self.sql) {
+        let scanned = match scan(self.sql) {
             Ok(scanned) => scanned,
             Err(_) => {
                 self.segment_gap(
@@ -273,6 +301,7 @@ impl<'source> SegmentParser<'_, 'source> {
         let mut previous_end = 0;
         let mut depth = 0;
         let mut separators = 0;
+        let mut previous_separator = None;
         for raw in scanned {
             let Some(range) = usize::try_from(raw.start)
                 .ok()
@@ -297,29 +326,32 @@ impl<'source> SegmentParser<'_, 'source> {
             if matches!(raw.token(), Token::SqlComment | Token::CComment) {
                 continue;
             }
-            if text == "\\" {
-                self.gap(
-                    range,
-                    CoverageGapKind::UnsupportedSql,
+            let control = if text == "\\" {
+                Some((
+                    range.clone(),
                     "client directives require runner interpretation",
-                );
-                return None;
-            }
-            if text == "{"
+                ))
+            } else if text == "{"
                 && tokens.last().is_some_and(|prev| {
-                    matches!(prev.text, "{" | "$") && prev.range.end == range.start
+                    matches!(prev.text, "{" | "$" | "%") && prev.range.end == range.start
                 })
             {
                 let start = tokens.last().expect("checked previous token").range.start;
-                self.gap(
+                Some((
                     start..range.end,
-                    CoverageGapKind::UnsupportedSql,
                     "unresolved template requires runner interpretation",
-                );
+                ))
+            } else {
+                None
+            };
+            if let Some((location, message)) = control {
+                self.gap(location, CoverageGapKind::UnsupportedSql, message);
+                self.recover_before_control(&tokens, previous_separator);
                 return None;
             }
             if depth == 0 && text == ";" {
                 separators += 1;
+                previous_separator = Some(tokens.len());
             }
             depth = delimiter_depth(depth, text);
             if depth > MAX_DELIMITER_DEPTH || separators > MAX_STATEMENTS {
@@ -335,10 +367,25 @@ impl<'source> SegmentParser<'_, 'source> {
         Some(tokens)
     }
 
-    fn normalize_batch(&mut self, raw: &[RawStmt], tokens: &[SqlToken<'_>]) {
+    fn recover_before_control(&mut self, tokens: &[SqlToken<'_>], end: Option<usize>) {
+        let Some(end) = end else { return };
+        let prefix = &tokens[..end];
+        let Some(range) = token_range(prefix) else {
+            return;
+        };
+        // Parse the completed prefix as a whole so no fragment of a control block
+        // becomes an independent operation.
+        if let Ok(result) = native_parse(&self.sql[..range.end]) {
+            self.normalize_batch(&result.protobuf.stmts, prefix, range.end);
+        } else {
+            self.recover(prefix);
+        }
+    }
+
+    fn normalize_batch(&mut self, raw: &[RawStmt], tokens: &[SqlToken<'_>], end: usize) {
         let mut next = 0;
         for statement in raw {
-            let Some((start, end)) = self.native_range(statement) else {
+            let Some((start, end)) = self.native_range(statement, end) else {
                 self.segment_gap(
                     CoverageGapKind::ParseError,
                     "could not locate PostgreSQL statements in the source segment",
@@ -372,11 +419,11 @@ impl<'source> SegmentParser<'_, 'source> {
         }
     }
 
-    fn native_range(&self, statement: &RawStmt) -> Option<(usize, usize)> {
+    fn native_range(&self, statement: &RawStmt, segment_end: usize) -> Option<(usize, usize)> {
         let start = usize::try_from(statement.stmt_location).ok()?;
         let len = usize::try_from(statement.stmt_len).ok()?;
         let end = if len == 0 {
-            self.sql.len()
+            segment_end
         } else {
             start.checked_add(len)?
         };
@@ -397,7 +444,7 @@ impl<'source> SegmentParser<'_, 'source> {
                 continue;
             };
             let start = range.start;
-            match pg_query::parse(&self.sql[range.clone()], pg_query::ParserOptions::default()) {
+            match native_parse(&self.sql[range.clone()]) {
                 Ok(result) if result.protobuf.stmts.len() == 1 => {
                     self.statement(&result.protobuf.stmts[0], group, start);
                 }

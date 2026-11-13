@@ -12,3 +12,5 @@ pg_query = "=18.1.0"
 
 [dev-dependencies]
 dmg-discovery = { path = "../dmg-discovery" }
+
+tempfile = "3.27"
