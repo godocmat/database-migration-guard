@@ -70,3 +70,6 @@ jobs:
       - name: Verify discovery corpus
         if: runner.os == 'Linux'
         run: cargo test --locked -p dmg-discovery --test corpus -- --ignored
+      - name: Verify offline risk corpus
+        if: runner.os == 'Linux'
+        run: cargo test --locked -p dmg-rules --test corpus -- --ignored

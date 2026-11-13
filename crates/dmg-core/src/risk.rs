@@ -121,3 +121,21 @@ pub enum EvidenceKind {
     CatalogEstimate,
     SimulationObservation,
 }
+
+#[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationLock {
+    ShareUpdateExclusive,
+    Share,
+    ShareRowExclusive,
+    AccessExclusive,
+}
+
+/// Predicted relation lock for a statement, including passing DDL.
+#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct RelationLockObservation {
+    pub migration: MigrationIdentity,
+    pub span: SourceSpan,
+    pub object: DatabaseObject,
+    pub mode: RelationLock,
+}
