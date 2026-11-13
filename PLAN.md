@@ -42,7 +42,7 @@ The preferred parser depends on native tooling. The initial build spike decides 
 ### Phase 0 research status
 
 - **DMG-01 parser research is complete.** Test `pg_query` 18.1.0 first with its bundled PostgreSQL 18.6 grammar. Use `pg_query` 6.2.1 with PostgreSQL 17.7 grammar as a reference in a separate executable, and retain `sqlparser` 0.64.0 as the alternate. The spike must verify grammar and normalized facts against PostgreSQL 17.12 and 18.7, original source spans and error locations, native builds and offline execution on the proposed platforms, and redistribution notices before accepting ADR 001. [Parser decision brief](docs/research/postgresql-parser.md)
-- **DMG-02 fixture and competitor research is complete.** Use the 28 proposed cases to build the development corpus. Independently label and freeze the holdout before rule tuning. Pin Squawk and Atlas versions and the Atlas edition before running the pilot, and score shared cases after verifying the same selected SQL and runner behavior. [Fixture matrix and pilot protocol](docs/research/fixtures-and-competitors.md)
+- **DMG-02 development corpus is integrated.** It covers 28 case designs, 65 reproducible Git pairs, and 130 adapter and PostgreSQL-major combinations. Recorded evidence includes 82 native runner executions and 10 two-session lock probes across PostgreSQL 17.12 and 18.7. In the SQLx opt-out cases, the single concurrent index build passed and the multi-statement batch returned `25001`, rolled back the preceding change, and left no candidate history row. Independent holdout labeling and freeze and the pinned Squawk and Atlas pilot are pending. [Development fixtures](fixtures/dmg-02/README.md) · [Native evidence](fixtures/dmg-02/evidence/README.md) · [Fixture research](docs/research/fixtures-and-competitors.md)
 
 ## 4. Functional requirements
 
@@ -360,7 +360,7 @@ Give each assignment one reviewable outcome, its backlog ID, base revision, allo
 
 The two research assignments ran in separate worktrees from `91c4f3d`. Their reviewed briefs and remaining checks are listed in [Phase 0 research status](#phase-0-research-status).
 
-Start the DMG-01 parser and portability spike from the integrated revision. The DMG-02 corpus assignment can proceed in parallel and supply cases as they land. The foundation assignment follows the parser and platform decision.
+The DMG-01 spike and DMG-02 corpus verification ran in separate worktrees from `949bda0`. The development corpus and the verified two-session observations are integrated. Foundation uses the reviewed parser and platform evidence, and discovery can start from its committed shared contracts.
 
 ### Break down implementation by dependency
 
