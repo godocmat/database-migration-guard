@@ -8,6 +8,7 @@ pub mod history;
 pub mod inspection;
 pub mod migration;
 pub mod policy;
+pub mod rehearsal;
 pub mod report;
 pub mod risk;
 pub mod snapshot;
