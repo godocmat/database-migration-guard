@@ -323,6 +323,8 @@ DMG-10 has versioned inspection evidence, a bounded TLS catalog collector, and n
 
 DMG-11 structural comparison is integrated. Expected-to-current and current-to-target comparisons retain partial coverage and require a reviewed mapping for renames. Application contract evaluation and live snapshot workflow verification are pending. [Schema comparison](docs/diff.md)
 
+DMG-12 worker provisioning is integrated. The Linux x86-64 worker verified isolation and removal on PostgreSQL 15.20, 16.16, 17.12, and 18.7. Framework-aware migration execution and revision-bound results have a separate assignment. [Worker verification](PROGRESS.md#dmg-12-disposable-postgresql-worker)
+
 ## 19. Risk register
 
 | Risk | Likelihood and impact | Owner | Trigger and response |
