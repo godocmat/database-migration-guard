@@ -114,12 +114,12 @@ Record the exact source revision, artifact SHA-256 or OCI digest, environment, a
 
 | Release check | Evidence and remaining work |
 | --- | --- |
-| Static analysis and supported adapters on PostgreSQL 15–18 | Local parser, native runner fixtures, public CLI checks and independent holdout rescore recorded. Rerun on the final integrated candidate. |
+| Static analysis and supported adapters on PostgreSQL 15–18 | Local parser and native runner fixtures recorded. Integrated Windows `af21401` matched all 130 public CLI cases and all 100 frozen holdout gate outcomes. [Accuracy and scope](../PROGRESS.md#dmg-15-frozen-holdout-rescore) |
 | Authorized inspection and schema comparison | Restricted-role TLS inspection, native history and Windows inspection-to-diff matrix recorded across PostgreSQL 15–18. |
-| Disposable rehearsal | Docker worker lifecycle previously checked on PostgreSQL 15–18 with cgroup v1. Full rehearsal matrix and cgroup v2 lifecycle remain pending. |
+| Disposable rehearsal | PostgreSQL 15–18 passed cgroup v2 lifecycle, deadlines, and 36 rehearsal cases. A PostgreSQL 18.7 seeded CLI workflow verified committed and rolled-back outcomes. [Cgroup v2 evidence](research/simulation-cgroup-v2-verification.md) |
 | Policy and report formats | Windows tests, fixture replay and OASIS SARIF validation recorded. Hosted consumption remains pending. |
 | Protected GitHub and GitLab | Local replays and template validation recorded. Verify real protected merges, fork behavior and artifact retention in the configured CI providers. |
-| Windows x86-64 package | Provisional native stage at ae83f53 passed independent package-pin verification, CycloneDX 1.5 validation and local install smoke. Clean disconnected host and final candidate verification remain pending. |
+| Windows x86-64 package | Integrated `af21401` staged twice with byte-identical artifacts. Local installation, upgrade, rollback, package pin, and CycloneDX 1.5 checks passed. Clean disconnected host remains pending. [Windows verification](research/integrated-windows-verification.md) |
 | Linux x86-64 package | Earlier pilot ran on Ubuntu 24.04. Verify the final native package and upgrade in a clean environment. |
 | macOS arm64 package | Native build, clean install and upgrade verification pending. |
 | Linux x86-64 CLI and GitLab images | Pinned recipes. Verify Docker builds and runtime checks and scan the exact OCI artifacts. |

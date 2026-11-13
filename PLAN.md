@@ -323,9 +323,13 @@ DMG-10 has versioned inspection evidence, bounded TLS catalog and native history
 
 DMG-11 structural comparison and application contract evaluation are integrated through `dmg diff`. Expected-to-current and current-to-target comparisons retain partial coverage and require a reviewed mapping for renames. The live inspection-to-diff workflow passed on PostgreSQL 15.20, 16.16, 17.12, and 18.7. [Schema comparison and contract status](PROGRESS.md#dmg-11-schema-diff-and-application-contracts)
 
-DMG-12 worker provisioning and revision-bound execution are integrated through `dmg simulate`. The Linux x86-64 worker verified isolation and removal on PostgreSQL 15.20, 16.16, 17.12, and 18.7 under cgroup v1. The runner execution fixture passed against a separate native PostgreSQL 18.7 cluster. Full rehearsal on the isolated workers and cgroup v2 verification are pending. [Worker and execution verification](PROGRESS.md#dmg-12-disposable-postgresql-worker)
+DMG-12 worker provisioning and revision-bound execution are integrated through `dmg simulate`. PostgreSQL 15.20, 16.16, 17.12, and 18.7 passed the Linux x86-64 cgroup v2 lifecycle, deadlines, and 36 rehearsal cases. The seeded PostgreSQL 18.7 CLI verified committed success and rolled-back failure through the protected check and report commands. The earlier lifecycle matrix also passed under cgroup v1. [Worker and execution verification](PROGRESS.md#dmg-12-disposable-postgresql-worker)
 
 DMG-13 trusted baselines, scoped approvals, and rehearsal evidence checks are integrated. DMG-14 saved analysis renders HTML, SARIF, and GitLab Code Quality alongside existing formats. The GitLab protected merged-result gate and fork advisory passed the local replay. Hosted enforcement and runner image verification remain pending. [Policy and report verification](PROGRESS.md#dmg-13-policy-evidence-and-dmg-14-report-formats)
+
+DMG-15 boundary fixes and ruleset 2 are integrated. The staged Windows candidate matched all 100 frozen holdout gate outcomes and 56 of 64 exact required findings. Windows performance evidence is recorded. The Linux performance budget and final accuracy review remain acceptance items. [Boundary, accuracy, and performance](PROGRESS.md#dmg-15-frozen-holdout-rescore)
+
+DMG-16 local release staging and operator documentation are integrated. The exact Windows package and SBOM reproduced across two native builds and passed local install and rollback. Clean disconnected Windows and native macOS arm64 checks, signatures, and release-owner approval remain pending. [Release acceptance matrix](docs/release.md#acceptance-matrix)
 
 ## 19. Risk register
 
