@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::{
     digest::ContentDigest,
-    inspection::{InspectionGap, Observation},
+    inspection::{InspectionField, InspectionGap, Observation},
     migration::{MigrationAdapter, MigrationDirection, MigrationFile, MigrationIdentity},
     schema::SchemaVersionV1,
     snapshot::QualifiedName,
@@ -165,7 +165,12 @@ impl NativeHistoryEvidenceV1 {
         {
             return Err(HistoryEvidenceError::InvalidSource);
         }
-        if coverage == NativeHistoryCoverage::Unavailable && !rows.is_empty() {
+        if (coverage == NativeHistoryCoverage::Unavailable && !rows.is_empty())
+            || (coverage == NativeHistoryCoverage::Complete
+                && gaps
+                    .iter()
+                    .any(|gap| gap.field != InspectionField::NativeChecksum))
+        {
             return Err(HistoryEvidenceError::InvalidCoverage);
         }
         if rows.iter().any(|row| !is_valid_row(row, adapter)) {
@@ -247,6 +252,8 @@ fn is_valid_row(row: &NativeHistoryRow, adapter: MigrationAdapter) -> bool {
         && MigrationIdentity::from_version(adapter, row.identity.version.clone()).is_ok()
         && (row.direction == MigrationDirection::Forward || adapter == MigrationAdapter::Flyway)
         && (adapter != MigrationAdapter::Flyway || row.rank.is_some_and(|rank| rank > 0))
+        && (!matches!(adapter, MigrationAdapter::Sqlx | MigrationAdapter::Supabase)
+            || row.rank.is_none())
         && (adapter != MigrationAdapter::Goose
             || row
                 .identity
@@ -353,7 +360,7 @@ impl TryFrom<NativeHistoryFields> for NativeHistoryEvidenceV1 {
 pub enum HistoryEvidenceError {
     #[error("native history evidence has an invalid or missing source")]
     InvalidSource,
-    #[error("unavailable native history cannot contain observed rows")]
+    #[error("native history rows or gaps disagree with declared coverage")]
     InvalidCoverage,
     #[error("native history row disagrees with the declared runner or identity")]
     InvalidRow,

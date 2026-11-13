@@ -7,7 +7,10 @@ use thiserror::Error;
 
 use crate::{
     digest::ContentDigest,
-    inspection::{CatalogField, InspectionGap, canonicalize_schema_names, is_catalog_identifier},
+    inspection::{
+        CatalogField, InspectionGap, canonicalize_schema_names, gaps_reference_only_schemas,
+        is_catalog_identifier,
+    },
     risk::{DatabaseObject, ObjectKind},
     schema::SchemaVersionV1,
 };
@@ -179,7 +182,7 @@ impl SchemaSnapshotV1 {
         mut dependencies: Vec<DependencyEdge>,
         mut gaps: Vec<InspectionGap>,
     ) -> Result<Self, SnapshotError> {
-        if schemas.len() > 32 || canonicalize_schema_names(&mut schemas).is_err() {
+        if canonicalize_schema_names(&mut schemas).is_err() {
             return Err(SnapshotError::InvalidSchema);
         }
         let includes = |schema: &String| schemas.binary_search(schema).is_ok();
@@ -192,6 +195,19 @@ impl SchemaSnapshotV1 {
         }
         if tables.windows(2).any(|pair| pair[0].name == pair[1].name) {
             return Err(SnapshotError::DuplicateTable);
+        }
+        let mut relation_names = tables
+            .iter()
+            .map(|table| (&table.name.schema, &table.name.name))
+            .collect::<BTreeSet<_>>();
+        for table in &tables {
+            if table
+                .indexes
+                .iter()
+                .any(|index| !relation_names.insert((&table.name.schema, &index.name)))
+            {
+                return Err(SnapshotError::InvalidIndex);
+            }
         }
 
         partition_edges.sort_unstable();
@@ -217,6 +233,9 @@ impl SchemaSnapshotV1 {
         }
         dependencies.sort_unstable();
         dependencies.dedup();
+        if !gaps_reference_only_schemas(&gaps, &schemas) {
+            return Err(SnapshotError::InvalidGapScope);
+        }
         gaps.sort_unstable();
         gaps.dedup();
         Ok(Self {
@@ -289,6 +308,7 @@ fn canonicalize_table(
             || !column_names.insert(&column.name)
             || !is_catalog_identifier(&column.name)
             || !column.data_type.is_valid()
+            || (column.generation.is_some() && (!column.has_default || column.identity.is_some()))
             || !definition_is_valid(&column.default_definition, column.has_default)
         {
             return Err(SnapshotError::InvalidColumn);
@@ -432,4 +452,6 @@ pub enum SnapshotError {
     InvalidPartitionEdge,
     #[error("snapshot contains a dependency endpoint outside the observed scope")]
     InvalidDependency,
+    #[error("snapshot contains a gap outside its visible schemas")]
+    InvalidGapScope,
 }

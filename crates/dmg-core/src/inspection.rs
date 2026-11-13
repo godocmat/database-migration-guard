@@ -65,13 +65,15 @@ impl TryFrom<Vec<String>> for InspectionScope {
     type Error = InspectionEvidenceError;
 
     fn try_from(mut schemas: Vec<String>) -> Result<Self, Self::Error> {
-        if schemas.is_empty() || schemas.len() > 32 {
+        if schemas.is_empty() {
             return Err(InspectionEvidenceError::InvalidScope);
         }
         canonicalize_schema_names(&mut schemas)?;
         Ok(Self(schemas))
     }
 }
+
+pub(crate) const MAX_INSPECTION_SCHEMAS: usize = 32;
 
 pub(crate) fn is_catalog_identifier(value: &str) -> bool {
     !value.is_empty() && value.len() <= 63 && !value.chars().any(char::is_control)
@@ -80,6 +82,9 @@ pub(crate) fn is_catalog_identifier(value: &str) -> bool {
 pub(crate) fn canonicalize_schema_names(
     schemas: &mut [String],
 ) -> Result<(), InspectionEvidenceError> {
+    if schemas.len() > MAX_INSPECTION_SCHEMAS {
+        return Err(InspectionEvidenceError::InvalidScope);
+    }
     schemas.sort_unstable();
     if schemas.iter().any(|schema| {
         !is_catalog_identifier(schema)
@@ -90,6 +95,16 @@ pub(crate) fn canonicalize_schema_names(
         return Err(InspectionEvidenceError::InvalidScope);
     }
     Ok(())
+}
+
+pub(crate) fn gaps_reference_only_schemas(gaps: &[InspectionGap], schemas: &[String]) -> bool {
+    gaps.iter().all(|gap| {
+        gap.scope.schema_name().is_none_or(|schema| {
+            schemas
+                .binary_search_by(|name| name.as_str().cmp(schema))
+                .is_ok()
+        })
+    })
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -159,6 +174,19 @@ pub enum InspectionGapScope {
     },
 }
 
+impl InspectionGapScope {
+    pub(crate) fn schema_name(&self) -> Option<&str> {
+        match self {
+            Self::Schema { schema } => Some(schema),
+            Self::Object { object } if object.kind == crate::risk::ObjectKind::Schema => {
+                Some(&object.name)
+            }
+            Self::Object { object } => object.schema.as_deref(),
+            Self::Target | Self::Migration { .. } => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InspectionField {
@@ -170,7 +198,9 @@ pub enum InspectionField {
     Indexes,
     Constraints,
     Partitions,
+    PartitionBound,
     Dependencies,
+    UnsupportedObjects,
     DefaultDefinition,
     IndexDefinition,
     ConstraintDefinition,
@@ -217,9 +247,9 @@ impl InspectionEvidenceV1 {
         history: Option<NativeHistoryEvidenceV1>,
         mut gaps: Vec<InspectionGap>,
     ) -> Result<Self, InspectionEvidenceError> {
-        scope.sort_unstable_by(|left, right| left.schema.cmp(&right.schema));
         let requested =
             InspectionScope::new(scope.iter().map(|entry| entry.schema.clone()).collect())?;
+        scope.sort_unstable_by(|left, right| left.schema.cmp(&right.schema));
         let visible = scope
             .iter()
             .filter(|entry| entry.state == SchemaState::Visible)
@@ -257,10 +287,7 @@ impl InspectionEvidenceV1 {
         {
             return Err(InspectionEvidenceError::HistoryTargetMismatch);
         }
-        if gaps.iter().any(|gap| {
-            matches!(&gap.scope, InspectionGapScope::Schema { schema }
-                if requested.schemas().binary_search(schema).is_err())
-        }) {
+        if !gaps_reference_only_schemas(&gaps, requested.schemas()) {
             return Err(InspectionEvidenceError::InvalidScope);
         }
         gaps.sort_unstable();
