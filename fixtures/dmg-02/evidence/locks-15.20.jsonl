@@ -1,0 +1,6 @@
+{"psql": "psql (PostgreSQL) 15.20", "runs": 5, "server_version": "15.20", "sha256": {"input_digests": "bab478e4ebe0cb86b6f768e7534c8449ced57f2fd3c91011e675243aac4a65a6", "manifest": "8f7bb9d58436cdd44713d8aec18ba5dc29850a1d8e8975bebedb721f6fbebd74", "postgres": "d7a54e24e91880f5d9bf718226c782c64ec3fec1d517a22afa979f76cdd36ee8", "psql": "48f1e6c40988953737e1c72ad378580d311bc84142e0589a5e6b9370791f3135"}}
+{"id": "R04a/scan/plain/pg15", "migration_sqlstate": null, "relation_locks": [["app.accounts", "AccessExclusiveLock"]], "source": "inputs/set-email-not-null.sql", "writer_sqlstate": {"app.accounts": "55P03"}}
+{"id": "R04b/validated-proof/plain/pg15", "migration_sqlstate": null, "relation_locks": [["app.accounts", "AccessExclusiveLock"]], "source": "inputs/set-email-not-null.sql", "writer_sqlstate": {"app.accounts": "55P03"}}
+{"id": "R04c/validate-check/plain/pg15", "migration_sqlstate": null, "relation_locks": [["app.accounts", "ShareUpdateExclusiveLock"]], "source": "inputs/validate-email.sql", "writer_sqlstate": {"app.accounts": null}}
+{"id": "R05/regular-index/plain/pg15", "migration_sqlstate": null, "relation_locks": [["app.accounts", "ShareLock"]], "source": "inputs/index-legacy.sql", "writer_sqlstate": {"app.accounts": "55P03"}}
+{"id": "V02/same-bytes/plain/pg15", "migration_sqlstate": "42809", "source": "inputs/partitioned-fk.sql"}

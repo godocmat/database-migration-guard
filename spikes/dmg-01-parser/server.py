@@ -12,7 +12,7 @@ import tempfile
 import time
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-VERSIONS = {"17.12": 170012, "18.7": 180007}
+VERSIONS = {"15.20": 150020, "16.16": 160016, "17.12": 170012, "18.7": 180007}
 CASES = (
     ("quoted",), ("index",), ("updates",), ("fk-add", "fk-validate"),
     ("not-null",), ("part-fk",), ("unique",), ("do",), ("broken",),

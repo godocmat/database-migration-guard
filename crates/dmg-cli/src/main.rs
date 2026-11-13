@@ -153,9 +153,11 @@ enum ReviewFormat {
 
 fn parse_target(value: &str) -> Result<PostgresTarget, &'static str> {
     match value {
+        "15" => Ok(PostgresTarget::V15),
+        "16" => Ok(PostgresTarget::V16),
         "17" => Ok(PostgresTarget::V17),
         "18" => Ok(PostgresTarget::V18),
-        _ => Err("expected PostgreSQL major 17 or 18"),
+        _ => Err("expected PostgreSQL major 15 through 18"),
     }
 }
 

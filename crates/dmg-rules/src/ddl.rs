@@ -732,14 +732,15 @@ impl Ddl<'_> {
             },
         );
         finding.documentation = match risk.rule {
-            Rule::Pg005 if risk.severity == Severity::Medium => match self.target {
-                PostgresTarget::V17 => "https://www.postgresql.org/docs/17/sql-dropindex.html",
-                PostgresTarget::V18 => "https://www.postgresql.org/docs/18/sql-dropindex.html",
+            Rule::Pg005 if risk.severity == Severity::Medium => {
+                format!(
+                    "https://www.postgresql.org/docs/{}/sql-dropindex.html",
+                    self.target
+                )
             }
-            .into(),
-            _ if self.target == PostgresTarget::V17 => {
-                finding.documentation.replace("/18/", "/17/")
-            }
+            _ if self.target < PostgresTarget::V18 => finding
+                .documentation
+                .replace("/18/", &format!("/{}/", self.target)),
             _ => return,
         };
     }

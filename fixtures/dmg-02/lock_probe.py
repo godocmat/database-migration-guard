@@ -12,7 +12,7 @@ import tempfile
 import time
 
 from corpus import ROOT, read_corpus, require, variants
-from native_probe import Cluster, ERROR, command_env, execute
+from native_probe import ADDITIONAL_SERVERS, Cluster, ERROR, command_env, execute
 
 
 CASES = {
@@ -74,7 +74,7 @@ def probe(cluster, manifest, label, variant, profile, major, number):
     require(len(variant["write"]) == 1, f"{case} needs one candidate file")
     source = ROOT / variant["write"][0][1]
     record = {"id": f"{label}/pg{major}", "source": source.relative_to(ROOT).as_posix()}
-    if major == "17" and case == "V02":
+    if major != "18" and case == "V02":
         result = cluster.psql(database, "--single-transaction", "--file", str(source), check=False)
         error = ERROR.search(result.stderr)
         require(result.returncode != 0 and error and error.group(1) == "42809",
@@ -117,7 +117,8 @@ def main():
     manifest, _ = read_corpus()
     version = execute(pg_bin / "postgres", "--version").stdout.strip().split()[-1]
     major = version.split(".")[0]
-    require(manifest["postgres"].get(major) == version, f"unexpected PostgreSQL {version}")
+    expected_version = manifest["postgres"].get(major, ADDITIONAL_SERVERS.get(major))
+    require(expected_version == version, f"unexpected PostgreSQL {version}")
     psql = execute(pg_bin / "psql", "--version").stdout.strip()
     require(psql.split()[-1] == version, f"psql version differs from PostgreSQL {version}")
     cases = [(label, variant) for label, variant, profile in variants(manifest)

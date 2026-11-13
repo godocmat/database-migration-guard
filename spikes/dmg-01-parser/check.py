@@ -167,7 +167,9 @@ def check_offline(directory):
 
 
 def check_servers(directory):
-    for version, number in (("17.12", 170012), ("18.7", 180007)):
+    for version, number in (
+        ("15.20", 150020), ("16.16", 160016), ("17.12", 170012), ("18.7", 180007)
+    ):
         rows = load(directory, f"server-{version}")
         assert len(rows) == 12 and all(
             (row["server_version_num"], row["protocol"], row["server_encoding"],
@@ -186,7 +188,7 @@ def check_servers(directory):
             assert [r["tag"] for r in by_case[case]["results"]] == tags
             assert by_case[case]["observation"] == observation
         for case, state, routine, byte in (
-            ("unique", "0A000", "processCASbits", None if version == "17.12" else 45),
+            ("unique", "0A000", "processCASbits", 45 if version == "18.7" else None),
             ("broken", "42601", "scanner_yyerror", 45),
             ("dollar", "42601", "scanner_yyerror", 16),
             ("eof", "42601", "scanner_yyerror", len(fixture("eof"))),
@@ -195,14 +197,14 @@ def check_servers(directory):
             err = result["error"]
             assert (err["sqlstate"], err["routine"], err.get("byte")) == (state, routine, byte), err
         assert by_case["broken"]["observation"] == [["t"]]
-        if version == "17.12":
+        if version != "18.7":
             assert by_case["part-fk"]["results"][0]["error"]["sqlstate"] == "42809"
             assert by_case["not-null"]["results"][0]["error"]["sqlstate"] == "42601"
         else:
             assert by_case["part-fk"]["observation"] == [["f", "false"]]
             assert by_case["not-null"]["observation"] == [["n", "false"]]
         assert rows == load(EVIDENCE, f"server-{version}"), f"server {version}: recorded output differs"
-    print("PostgreSQL 17.12 and 18.7 simple-query results match.")
+    print("PostgreSQL 15.20, 16.16, 17.12, and 18.7 simple-query results match.")
 
 
 if __name__ == "__main__":

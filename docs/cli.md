@@ -26,7 +26,7 @@ version_order = "positive_integer"
 transaction = "file"
 ```
 
-Select PostgreSQL `17` or `18`. Roots are relative to `--repo`, which defaults to the current directory. File arguments such as `--config`, `--policy`, and `--output` resolve from the invocation directory. `--config` defaults to `dmg.toml`. Use `transaction = "autocommit"` for a plain runner that submits individual statements and follows explicit SQL transaction commands. The default static search path is `["public"]`. One configured schema resolves an unqualified name to that schema. For several possible schemas, qualify names in migrations where the rules need a resolved identity.
+Select PostgreSQL `15`, `16`, `17`, or `18`. Roots are relative to `--repo`, which defaults to the current directory. File arguments such as `--config`, `--policy`, and `--output` resolve from the invocation directory. `--config` defaults to `dmg.toml`. Use `transaction = "autocommit"` for a plain runner that submits individual statements and follows explicit SQL transaction commands. The default static search path is `["public"]`. One configured schema resolves an unqualified name to that schema. For several possible schemas, qualify names in migrations where the rules need a resolved identity.
 
 For SQLx 0.8.6, use `[adapter]` with `kind = "sqlx"` and `layout = "simple"` or `"reversible"`. Reversible Down files remain in the integrity inventory. [Migration discovery and transaction modes](migration-formats.md)
 

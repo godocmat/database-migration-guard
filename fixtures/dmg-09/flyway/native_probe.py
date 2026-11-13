@@ -16,7 +16,7 @@ import zlib
 
 
 FLYWAY = "13.12.2"
-SERVERS = {"17.12", "18.7"}
+SERVERS = {"15.20", "16.16", "17.12", "18.7"}
 ROLE = "dmg_fixture"
 BASE = {
     "V1__base.sql": (

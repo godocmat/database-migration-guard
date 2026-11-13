@@ -357,5 +357,11 @@ fn emits_deterministic_report_and_reads_additive_fields() {
 
     payload["schema_version"] = json!(2);
     assert!(ReportV1::from_json(&payload.to_string()).is_err());
-    assert!(PostgresTarget::try_from(16).is_err());
+    for major in 15..=18 {
+        let target = PostgresTarget::try_from(major).unwrap();
+        assert_eq!(target.major(), major);
+        assert_eq!(serde_json::to_value(target).unwrap(), json!(major));
+    }
+    assert!(PostgresTarget::try_from(14).is_err());
+    assert!(PostgresTarget::try_from(19).is_err());
 }

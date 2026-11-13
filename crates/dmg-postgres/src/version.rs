@@ -187,7 +187,7 @@ fn check_constraint(
     location: &SourceSpan,
     gaps: &mut Vec<CoverageGap>,
 ) {
-    if target != PostgresTarget::V17 {
+    if target >= PostgresTarget::V18 {
         return;
     }
     let issue = match constraint.kind {
@@ -220,7 +220,7 @@ fn check_constraint(
                 Some(_) => None,
                 None => Some((
                     CoverageGapKind::UnresolvedDependency,
-                    "table kind is needed to check a NOT VALID foreign key on PostgreSQL 17",
+                    "table kind is needed to check a NOT VALID foreign key before PostgreSQL 18",
                 )),
             }
         }

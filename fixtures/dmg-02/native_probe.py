@@ -20,6 +20,7 @@ CASES = {"D01", "D02", "D04", "R03a", "R03b", "R04c", "T01", "T02", "T03", "T04"
          "S01", "S02", "S03", "V01", "V02"}
 USER = "dmg_fixture"
 PORT = 5432
+ADDITIONAL_SERVERS = {"15": "15.20", "16": "16.16"}
 ERROR = re.compile(r"ERROR:\s+([A-Z0-9]{5}): ([^\n]+)")
 
 
@@ -115,7 +116,7 @@ def expected_sqlstate(case, target, seed):
         return {"D02": "42P01", "S02": "42601"}[case]
     if case == "R04c" and seed == "null-email":
         return "23514"
-    if target == "17":
+    if target != "18":
         return {"V01": "42601", "V02": "42809"}.get(case)
     return None
 
@@ -299,7 +300,8 @@ def main():
     manifest, inputs = read_corpus()
     version = execute(pg_bin / "postgres", "--version").stdout.strip().split()[-1]
     target = version.split(".")[0]
-    require(manifest["postgres"].get(target) == version, f"unexpected PostgreSQL {version}")
+    expected_version = manifest["postgres"].get(target, ADDITIONAL_SERVERS.get(target))
+    require(expected_version == version, f"unexpected PostgreSQL {version}")
     psql = execute(pg_bin / "psql", "--version").stdout.strip()
     require(psql.split()[-1] == version, f"psql version differs from PostgreSQL {version}")
     sqlx_version = execute(sqlx, "--version").stdout.strip()

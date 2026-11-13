@@ -167,7 +167,12 @@ fn distinguishes_target_syntax_and_requires_context_for_partitioned_fk() {
             (base.path.clone(), baseline.as_slice()),
             (candidate.path.clone(), sql.as_slice()),
         ]);
-        for target in [PostgresTarget::V17, PostgresTarget::V18] {
+        for target in [
+            PostgresTarget::V15,
+            PostgresTarget::V16,
+            PostgresTarget::V17,
+            PostgresTarget::V18,
+        ] {
             let parsed = parse_plan(&plan, target, |path| sources.get(path).copied());
             assert_eq!(parsed.selected_forwards, plan.selected_forwards);
             assert_eq!(parsed.migrations.len(), 2);
@@ -207,7 +212,7 @@ fn distinguishes_target_syntax_and_requires_context_for_partitioned_fk() {
                     assert_eq!(referenced_table.name, "accounts");
                 }
             }
-            if target == PostgresTarget::V17 {
+            if target < PostgresTarget::V18 {
                 assert_eq!(
                     path_gap_kind(&parsed.coverage),
                     CoverageGapKind::IncompatibleTarget

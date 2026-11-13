@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 
 
 GOOSE = "v3.30.1"
-POSTGRES = {"17.12", "18.7"}
+POSTGRES = {"15.20", "16.16", "17.12", "18.7"}
 ROLE = "dmg_fixture"
 HISTORY = "public.goose_db_version"
 BASE = "-- +goose Up\nCREATE TABLE public.probe (id integer PRIMARY KEY);\n"

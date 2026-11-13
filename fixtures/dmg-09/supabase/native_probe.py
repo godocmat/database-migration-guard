@@ -16,6 +16,7 @@ import tempfile
 
 
 CLI_VERSION = "3.0.0"
+POSTGRES = {"15.20", "16.16", "17.12", "18.7"}
 ROLE = "dmg_fixture"
 HISTORY = "supabase_migrations.schema_migrations"
 BASE = "CREATE TABLE public.probe (id integer PRIMARY KEY);"
@@ -328,7 +329,7 @@ def observe(probe):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--supabase", required=True, type=Path, help="Supabase CLI 3.0.0 executable")
-    parser.add_argument("--pg-bin", required=True, type=Path, help="PostgreSQL 17.12 or 18.7 bin directory")
+    parser.add_argument("--pg-bin", required=True, type=Path, help="pinned PostgreSQL bin directory")
     args = parser.parse_args()
     cli = args.supabase.resolve(strict=True)
     pg_bin = args.pg_bin.resolve(strict=True)
@@ -337,7 +338,7 @@ def main():
         version = probe.run(cli, "--version").stdout.strip()
         postgres = probe.run(pg_bin / "postgres", "--version").stdout.strip()
         require(version == CLI_VERSION, f"expected Supabase CLI {CLI_VERSION}, observed {version}")
-        require(postgres in {"postgres (PostgreSQL) 17.12", "postgres (PostgreSQL) 18.7"},
+        require(postgres in {f"postgres (PostgreSQL) {version}" for version in POSTGRES},
                 f"unexpected PostgreSQL version: {postgres}")
         with probe.running():
             cases = list(observe(probe))
