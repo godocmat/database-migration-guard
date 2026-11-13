@@ -45,7 +45,7 @@ The native history reader passed its three fixture groups on each major over ver
 
 ## DMG-11 schema diff and application contracts
 
-The core schema comparison distinguishes incomplete coverage from known absence and requires reviewed rename mappings. The application evaluator checks exact deployed dependencies for type, nullability, and structural write regressions. Windows verification passed nine diff, eight application-contract, and four dedicated `dmg diff` cases. Live snapshot comparison through the CLI is in progress. [Schema diff](docs/diff.md) · [Application contracts](docs/application-contracts.md)
+The core schema comparison distinguishes incomplete coverage from known absence and requires reviewed rename mappings. The application evaluator checks exact deployed dependencies for type, nullability, and structural write regressions. Windows verification passed nine diff, eight application-contract, and four dedicated `dmg diff` cases. The live CLI fixture at `102af26` passed on PostgreSQL 15.20, 16.16, 17.12, and 18.7 with verified TLS and a restricted reader. It checked drift, reviewed renames, critical contract regressions, and incomplete scopes. [Live verification](docs/research/inspect-diff-verification.md) · [Schema diff](docs/diff.md) · [Application contracts](docs/application-contracts.md)
 
 ## PostgreSQL 15 and 16 target verification
 
@@ -61,8 +61,10 @@ The worker at `dfb48f9` passed the Rust lifecycle test against each pinned Postg
 
 Revision-bound rehearsal and runner delivery landed at `abb1975`. The loopback native Windows PostgreSQL 18.7 fixture passed nine runner and transaction cases plus server cancellation. It verified the raw protocol and execution core. The final Linux execution build, end-to-end Docker rehearsal on PostgreSQL 15–18, and cgroup v2 lifecycle tests are pending. The initial Linux execution API compiled before the final protocol changes. [Rehearsal profile and verification](docs/simulation.md)
 
+`1e67576` adds `dmg simulate` with offline expected-binding generation, typed preflight and runtime outcomes, and atomic evidence output. Windows checks covered exact setup and candidate bindings, valid Linux worker paths on an unsupported host, and pinned import of the emitted incomplete report by `dmg check`. [Simulation command](docs/simulation.md#run-from-the-cli)
+
 ## DMG-13 policy evidence and DMG-14 report formats
 
-`dd5d589` verifies protected exact-byte pins, reproduces baseline findings from the reviewed Git reference, audits exact scoped approvals and expiry, and independently reconstructs the rehearsal plan from Git. Windows workspace tests, Clippy, and the local GitHub replay passed. The policy acceptance fixtures used saved rehearsal evidence. The protected publisher supplies the approved worker binding and exact artifact pin. [Policy evidence workflow](docs/policy-evidence.md)
+`dd5d589` verifies protected exact-byte pins, reproduces baseline findings from the reviewed Git reference, audits exact scoped approvals and expiry, and independently reconstructs the rehearsal plan from Git. Windows workspace tests, Clippy, and the local GitHub replay passed. All 130 public CLI cases matched the expected 48 passing, 58 denied, and 24 incomplete outcomes. The policy acceptance fixtures used saved rehearsal evidence. The protected publisher supplies the approved worker binding and exact artifact pin. [Policy evidence workflow](docs/policy-evidence.md)
 
 `d650aac` renders saved analysis as HTML, SARIF 2.1.0, and GitLab Code Quality. The focused Windows CLI and renderer tests passed. Four fixture reports passed the OASIS SARIF schema and local HTML and Code Quality checks. Hosted ingestion and standalone diff and rehearsal rendering are pending. [Report format and limits](docs/report-formats.md)
