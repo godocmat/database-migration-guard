@@ -23,4 +23,16 @@ python -B scripts/verify-windows-upgrade.py `
 
 The helper verifies the candidate manifest, binary, SBOM and checksum list with the standard package verifier. It installs the pinned pilot, upgrades the same temporary path to the candidate, and restores the pilot. It verifies the installed digest before and after each phase. Each phase runs the local GitHub replay for exits 0, 1 and 3. The candidate also runs the installed report smoke and GitLab replay. Capture the console output and exit status alongside the guest record. The temporary installations and repositories are removed at the end. [Installed smoke](../../scripts/smoke-release.py) · [GitHub replay](../../integrations/github/tests/replay.py) · [GitLab replay](../../integrations/gitlab/tests/replay.py)
 
-The helper passed on the existing Windows 11 Pro x86-64 host with Git for Windows 2.45.1, Python 3.11.6, UCRT 10.0.26100.9711 and Visual C++ runtime 14.51.36247.0. The host retained its network configuration. The helper also rejected an incorrect manifest digest, a modified SBOM, and an incorrect rollback executable digest before invoking the package binaries. The disconnected guest acceptance remains pending.
+The helper passed on the existing Windows 11 Pro x86-64 host with Git for Windows 2.45.1, Python 3.11.6, UCRT 10.0.26100.9711 and Visual C++ runtime 14.51.36247.0. The host retained its network configuration. The helper also rejected an incorrect manifest digest, a modified SBOM, and an incorrect rollback executable digest before invoking the package binaries. A repeat of the integrated helper passed with log SHA-256 `94311298e3ac0539ee8c971cd7414a8b3a14816c364ce7f9a67d73a76daf6603`. The disconnected guest acceptance remains pending.
+
+## Transfer bundle
+
+The local `dmg-windows-offline-acceptance.zip` contains the candidate, rollback package, exact harness and replay files from `87c0e26`, checksums and a guest README. Two independent ZIP writes yielded SHA-256 `a7c5d22bbf14cfd3d839379a52846881ea6e1aba675376c4c92bdf82716bfeed`. Verify that digest before extraction and use the README to check the extracted files. The archive contains only the reviewed test inputs and requires a Windows x86-64 guest.
+
+The exact extracted bundle passed the host replay with the separately staged portable Python 3.14.10 and MinGit 2.56.1 after adding the bundle's verified `scripts` directory to the extracted copy of Python's isolated module path. Log SHA-256 is `9f94776b79006b73e5790b30a2f7a8f40db5a7721f689293bfa9e4ee60c97641`. The optional Microsoft redistributable was signature-checked for transfer. The replay used the existing host runtime. [Python release](https://www.python.org/downloads/release/python-31410/) · [Git for Windows release](https://github.com/git-for-windows/git/releases/tag/v2.56.1.windows.1) · [Microsoft x64 runtime](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/)
+
+| Optional guest input | SHA-256 |
+| --- | --- |
+| `python-3.14.10-embed-amd64.zip` | `90905e64a840557d8c1bc4f5b74db3d7ee85e3ffb217611cac1c7813acea4159` |
+| `MinGit-2.56.1-64-bit.zip` | `4a92850b6e917da4fd010669b614b55dccf5b0ec333a534cc4be4700dfefdafd` |
+| `vc_redist.x64.exe` 14.52.37029.0 | `9c02c9ed120f671b900e6b9471d890e3b2414117a7e53f4ae2e855466fa2b7c9` |

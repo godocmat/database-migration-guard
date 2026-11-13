@@ -13,4 +13,6 @@ Ruleset 2 reports PG002 compatibility risk for table and column removal alongsid
 
 Rehearsal reports can include `cleanup_worker` when Docker removal could not be confirmed. Older strict report decoders need an update to read a report that includes this field. [Worker recovery](docs/research/simulation-worker.md#postgresql-connection-and-teardown)
 
+The Linux x86-64 CLI and GitLab images use the pinned Wolfi runtime with Git HTTPS. GitLab also includes Bash and Python 3.15. Offline rebuilds require the retained signed package snapshot. [Container build inputs](docs/release.md#retain-the-container-build-inputs)
+
 See the [release acceptance matrix](docs/release.md#acceptance-matrix) for the tested profiles and remaining release checks.

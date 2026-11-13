@@ -7,7 +7,7 @@ This draft covers the Linux x86-64 images built from the Wolfi recipes at `32a8f
 | CLI | `sha256:bdb1dea8c5af750f3e829105164c3ea6ef1189c1a0db423aee3105407c93c3f3` | 19 base and 24 additions |
 | GitLab | `sha256:03e323d199a7513eeaa280fd02fd4c0bd491cc8660cf2f2573bed4596afd4570` | The 43 CLI packages plus 11 GitLab additions |
 
-The installed APK databases extracted from both OCI archives matched all reviewed package names, versions and declared license expressions. The GitLab archive contained the reviewed Python and mpdecimal notice files and the exact pip wheel. Repeat the comparison against the manifests selected for distribution, including the file digests below.
+The installed APK databases extracted from both OCI archives matched all reviewed package names, versions and declared license expressions. The GitLab archive contained the reviewed Python and mpdecimal notice files and the exact pip wheel. The final reproducible Wolfi archives were checked again and match all 43 and 54 package records and the reviewed GitLab notice and wheel bytes. [Final runtime manifests](updated-container-runtime.md) · [Final image inventory](image-advisory-acceptance.md)
 
 ## Package and source evidence
 
