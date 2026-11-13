@@ -31,4 +31,4 @@ Run the ignored worker lifecycle test against a fresh isolated daemon that conta
 cargo test --locked --offline -p dmg-simulate isolated_worker_lifecycle -- --ignored
 ```
 
-The current implementation runs workers on Linux x86-64. The native Windows build exposes the unsupported-platform result. This layer supplies the disposable database and transport. Adapter execution, before-and-after snapshots and revision-bound evidence are separate DMG-12 work.
+The current implementation runs workers on Linux x86-64. The native Windows build exposes the unsupported-platform result. The [migration rehearsal](../simulation.md) uses this worker for framework-aware forward execution, before-and-after snapshots, and revision-bound evidence.

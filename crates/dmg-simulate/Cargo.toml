@@ -26,4 +26,9 @@ tokio-postgres = "=0.7.18"
 zeroize = "=1.9.1"
 
 [dev-dependencies]
+bytes = "=1.12.1"
+fallible-iterator = "=0.2.0"
+postgres-protocol = "=0.6.12"
+tokio = { version = "=1.54.1", features = ["macros", "rt", "time", "io-util", "net"] }
+tokio-postgres = "=0.7.18"
 tempfile = "=3.27.0"

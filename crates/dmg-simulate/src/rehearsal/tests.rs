@@ -226,5 +226,48 @@ fn refuses_unbound_worktree_and_unknown_runner_commands() {
     );
 }
 
+#[test]
+fn worker_scope_rejects_authored_schema_creation_and_external_relations() {
+    let discovery = discover(
+        plain(PlainTransaction::Autocommit),
+        &[],
+        &[("1_schema.sql", b"CREATE SCHEMA IF NOT EXISTS public;")],
+    );
+    let scope = context(PostgresTarget::V18).scope;
+    let error = expected_rehearsal_plan(
+        &discovery,
+        PostgresTarget::V18,
+        &scope,
+        &RehearsalMode::EmptyDatabase,
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.coverage().unwrap().gaps()[0].kind,
+        dmg_core::coverage::CoverageGapKind::UnsupportedSql
+    );
+
+    let discovery = discover(
+        plain(PlainTransaction::Autocommit),
+        &[],
+        &[(
+            "1_outside.sql",
+            b"ALTER TABLE elsewhere.items ADD COLUMN note text;",
+        )],
+    );
+    let error = expected_rehearsal_plan(
+        &discovery,
+        PostgresTarget::V18,
+        &scope,
+        &RehearsalMode::EmptyDatabase,
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.coverage().unwrap().gaps()[0].kind,
+        dmg_core::coverage::CoverageGapKind::UnresolvedDependency
+    );
+}
+
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod matrix;
+
+mod protocol_fixture;

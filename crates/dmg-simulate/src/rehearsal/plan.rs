@@ -530,15 +530,7 @@ fn prepare_script<'a>(
         return Err(error(CoverageGapKind::UnsupportedInput));
     }
     for statement in &parsed.statements {
-        if !seed
-            && matches!(&statement.operation,
-                Operation::CreateIndex(index) if index.concurrently
-            )
-            || !seed
-                && matches!(&statement.operation,
-                    Operation::Drop(drop) if drop.concurrently
-                )
-        {
+        if !seed && is_concurrent_index(&statement.operation) {
             return Err(statement_gap(
                 statement,
                 CoverageGapKind::UnresolvedTransactionMode,
@@ -641,10 +633,7 @@ fn plan_migration<'a>(
             .iter()
             .map(|statement| match &statement.operation {
                 Operation::Transaction(effect) => StatementEffect::Transaction(effect.clone()),
-                Operation::CreateIndex(index) if index.concurrently => {
-                    StatementEffect::ConcurrentIndex
-                }
-                Operation::Drop(drop) if drop.concurrently => StatementEffect::ConcurrentIndex,
+                operation if is_concurrent_index(operation) => StatementEffect::ConcurrentIndex,
                 _ => StatementEffect::Other,
             })
             .collect();
@@ -678,6 +667,14 @@ fn plan_migration<'a>(
         observation,
         groups,
     })
+}
+
+fn is_concurrent_index(operation: &Operation) -> bool {
+    match operation {
+        Operation::CreateIndex(index) => index.concurrently,
+        Operation::Drop(drop) => drop.kind == ObjectKind::Index && drop.concurrently,
+        _ => false,
+    }
 }
 
 fn check_worker_scope(
@@ -725,9 +722,6 @@ fn check_worker_scope(
                     }
                     _ => true,
                 })
-        }
-        Operation::Rename(rename) if rename.kind == ObjectKind::Schema => {
-            contains(&rename.object.name) && contains(&rename.new_name)
         }
         Operation::Rename(rename) => allowed(&rename.object),
         Operation::Drop(drop) if drop.kind == ObjectKind::Schema => {

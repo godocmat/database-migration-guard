@@ -15,6 +15,7 @@ use postgres_protocol::{
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use crate::{DockerWorker, WorkerStream};
 
 use super::plan::PlannedQuery;
@@ -35,8 +36,10 @@ pub(super) struct Session<S> {
     stream: S,
 }
 
+#[derive(Debug)]
 pub(super) enum ProtocolError {
     Transport,
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     Deadline,
     Invalid,
     Limit,
@@ -62,17 +65,25 @@ pub(super) enum CommandKind {
     Other,
 }
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 impl Session<WorkerStream<'_>> {
     pub(super) async fn connect<'worker>(
         worker: &'worker DockerWorker,
     ) -> Result<Session<WorkerStream<'worker>>, ProtocolError> {
-        let config = worker.connection_config();
-        let mut session = Session {
-            stream: worker.connect_stream().map_err(|error| match error {
-                crate::WorkerError::Deadline(_) => ProtocolError::Deadline,
-                _ => ProtocolError::Transport,
-            })?,
-        };
+        let stream = worker.connect_stream().map_err(|error| match error {
+            crate::WorkerError::Deadline(_) => ProtocolError::Deadline,
+            _ => ProtocolError::Transport,
+        })?;
+        Session::startup(stream, &worker.connection_config()).await
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> Session<S> {
+    pub(super) async fn startup(
+        stream: S,
+        config: &tokio_postgres::Config,
+    ) -> Result<Self, ProtocolError> {
+        let mut session = Self { stream };
         let user = config.get_user().ok_or(ProtocolError::Invalid)?;
         let mut startup = BytesMut::new();
         let mut parameters = vec![("user", user), ("client_encoding", "UTF8")];
@@ -92,9 +103,6 @@ impl Session<WorkerStream<'_>> {
         session.startup_ready().await?;
         Ok(session)
     }
-}
-
-impl<S: AsyncRead + AsyncWrite + Unpin> Session<S> {
     async fn authenticate(&mut self, password: &[u8]) -> Result<(), ProtocolError> {
         let mut budget = ResponseBudget::default();
         let Message::AuthenticationSasl(body) = self.authentication_message(&mut budget).await?
@@ -308,7 +316,9 @@ fn sqlstate(body: ErrorResponseBody) -> Result<String, ProtocolError> {
                     .iter()
                     .all(|byte| matches!(byte, b'0'..=b'9' | b'A'..=b'Z'))
             {
-                return Ok(field.value().into());
+                return std::str::from_utf8(state)
+                    .map(str::to_owned)
+                    .map_err(|_| ProtocolError::Invalid);
             }
             break;
         }
@@ -322,6 +332,7 @@ fn invalid(_: io::Error) -> ProtocolError {
 
 fn io_error(error: io::Error) -> ProtocolError {
     match error.kind() {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         io::ErrorKind::TimedOut => ProtocolError::Deadline,
         _ => ProtocolError::Transport,
     }

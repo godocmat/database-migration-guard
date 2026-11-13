@@ -2,8 +2,10 @@ mod plan;
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod execute;
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[cfg(any(test, all(target_os = "linux", target_arch = "x86_64")))]
 mod protocol;
+#[cfg(any(test, all(target_os = "linux", target_arch = "x86_64")))]
+mod runner;
 
 pub use plan::{
     MAX_REHEARSAL_SETUP_BYTES, PreparedRehearsal, RehearsalContext, RehearsalInput,
