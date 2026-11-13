@@ -98,6 +98,16 @@ pub struct Discovery {
 }
 
 impl Discovery {
+    /// The configured runner, including when the head inventory is empty.
+    pub fn adapter(&self) -> MigrationAdapter {
+        self.options.adapter.kind()
+    }
+
+    /// Whether head inventory was established independently of Git base availability.
+    pub fn head_complete(&self) -> bool {
+        self.head_complete
+    }
+
     pub fn source_bytes(&self, path: &RepoPath) -> Option<&[u8]> {
         self.sources.get(path).map(Vec::as_slice)
     }
