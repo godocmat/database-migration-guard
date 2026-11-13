@@ -153,6 +153,13 @@ impl Normalizer<'_, '_> {
                     });
                 normalize_rename(rename, action_span).map(Operation::Rename)
             }
+            Ast::DoStmt(_) => {
+                let body_span = tokens.iter().find(|token| token.text.starts_with('$') || token.text.starts_with('\''))
+                    .and_then(|token| span(self.map, self.base, token.range.clone()))
+                    .unwrap_or_else(|| location.clone());
+                self.unsupported(&body_span, "DO bodies are outside the supported PostgreSQL analysis subset");
+                Some(Operation::Unsupported)
+            }
             Ast::DropStmt(drop) => normalize_drop(drop).map(Operation::Drop),
             Ast::TruncateStmt(truncate) => normalize_truncate(truncate).map(Operation::Truncate),
             Ast::IndexStmt(index) => {

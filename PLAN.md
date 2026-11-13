@@ -42,7 +42,7 @@ The preferred parser depends on native tooling. Guard development uses Rust 1.10
 ### Phase 0 research status
 
 - **DMG-01 conformance spike is integrated.** The three candidates yielded 126 matching parser observations across Windows x86-64 and Linux x86-64, with 24 server observations on PostgreSQL 17.12 and 18.7. Use `pg_query` 18.1.0 in Guard and apply explicit target-version checks. Use scanner token ranges for statements and actions, with statement or segment diagnostics through the public binding. The spike records the redistribution notices and native build prerequisites. macOS arm64 and a disconnected Windows VM remain release acceptance checks. [Spike results and reproduction steps](spikes/dmg-01-parser/README.md) · [Parser decision brief](docs/research/postgresql-parser.md)
-- **DMG-02 development corpus is integrated.** It covers 28 case designs, 65 reproducible Git pairs, and 130 adapter and PostgreSQL-major combinations. Recorded evidence includes 82 native runner executions and 10 two-session lock probes across PostgreSQL 17.12 and 18.7. In the SQLx opt-out cases, the single concurrent index build passed and the multi-statement batch returned `25001`, rolled back the preceding change, and left no candidate history row. Independent holdout labeling and freeze and the pinned Squawk and Atlas pilot are pending. [Development fixtures](fixtures/dmg-02/README.md) · [Native evidence](fixtures/dmg-02/evidence/README.md) · [Fixture research](docs/research/fixtures-and-competitors.md)
+- **DMG-02 development corpus is integrated.** It covers 28 case designs, 65 reproducible Git pairs, and 130 adapter and PostgreSQL-major combinations. Recorded evidence includes 82 native runner executions and 10 two-session lock probes across PostgreSQL 17.12 and 18.7. In the SQLx opt-out cases, the single concurrent index build passed and the multi-statement batch returned `25001`, rolled back the preceding change, and left no candidate history row. Two independent reviewers confirmed the private synthetic holdout freeze for 100 combinations. Guard scoring and the pinned Squawk and Atlas pilot are pending. [Development fixtures](fixtures/dmg-02/README.md) · [Native evidence](fixtures/dmg-02/evidence/README.md) · [Holdout protocol](fixtures/dmg-02/holdout.md)
 
 ## 4. Functional requirements
 
@@ -306,7 +306,9 @@ Review requirements, run relevant checks, fix failures, update documentation, an
 
 DMG-03 is integrated. The Rust 1.100.0 workspace pins the build and versions its source, migration, policy, and report contracts. Native Windows x64 and Linux x64 passed the local build, Clippy, and six contract tests. Hosted CI and macOS arm64 are pending. [Foundation evidence](PROGRESS.md#dmg-03-workspace-foundation) · [Shared contracts](DECISIONS.md)
 
-DMG-04 is integrated. The discovery library preserves source bytes and ordered inventory for plain SQL and SQLx 0.8.6. It supports exact local Git comparisons and pinned integrity and applied-history manifests. Windows passed ten focused tests and worktree and Git comparisons across 24 distinct development recipes. [Migration formats and verification](docs/migration-formats.md)
+DMG-04 is integrated. The discovery library preserves source bytes and ordered inventory for plain SQL and SQLx 0.8.6. It supports exact local Git comparisons and pinned integrity and applied-history manifests. Windows and Linux passed focused tests and worktree and Git comparisons across 24 distinct development recipes. [Migration formats and verification](docs/migration-formats.md)
+
+DMG-05 is integrated. The parser normalizes the supported PostgreSQL 17–18 operations and preserves original source ranges and incomplete coverage. The Windows suite passed all twelve parser tests, including the LF and CRLF controls, target-version constraint cases, and malformed and unsupported SQL. [Supported SQL and parser limits](docs/postgresql-support.md)
 
 ## 19. Risk register
 

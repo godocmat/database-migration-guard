@@ -13,6 +13,9 @@ jobs:
     name: Workspace (${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
+    env:
+      # pg_query 18.1.0 uses the bundled Protobuf bindings when this is set.
+      DOCS_RS: '1'
     strategy:
       fail-fast: false
       matrix:
@@ -21,6 +24,39 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Locate Ubuntu libclang
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          libclang=/usr/lib/llvm-18/lib
+          if [[ ! -f "$libclang/libclang.so" ]]; then
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends libclang-18-dev
+          fi
+          test -f "$libclang/libclang.so"
+          echo "LIBCLANG_PATH=$libclang" >> "$GITHUB_ENV"
+      - name: Locate macOS libclang
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          libclang="$(brew --prefix llvm@18)/lib"
+          test -f "$libclang/libclang.dylib"
+          echo "LIBCLANG_PATH=$libclang" >> "$GITHUB_ENV"
+      - name: Locate Windows libclang
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $llvmBin = Join-Path $env:ProgramFiles 'LLVM/bin'
+          $libclang = Join-Path $llvmBin 'libclang.dll'
+          if (-not (Test-Path -LiteralPath $libclang -PathType Leaf)) {
+            $clang = Get-Command clang.exe -ErrorAction Stop
+            $llvmBin = Split-Path -Parent $clang.Source
+            $libclang = Join-Path $llvmBin 'libclang.dll'
+          }
+          if (-not (Test-Path -LiteralPath $libclang -PathType Leaf)) {
+            throw 'LLVM libclang.dll was not found'
+          }
+          "LIBCLANG_PATH=$llvmBin" >> $env:GITHUB_ENV
       - name: Select the pinned toolchain
         run: rustc -Vv
       - name: Check formatting
@@ -31,3 +67,6 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Test contracts
         run: cargo test --locked --workspace
+      - name: Verify discovery corpus
+        if: runner.os == 'Linux'
+        run: cargo test --locked -p dmg-discovery --test corpus -- --ignored
