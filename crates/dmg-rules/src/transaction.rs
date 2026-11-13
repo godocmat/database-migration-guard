@@ -63,19 +63,25 @@ pub(crate) struct TransactionTimeline {
     pub(crate) gaps: Vec<CoverageGap>,
 }
 
-/// A plain SQL runner uses a fresh psql session per migration. SQLx can reuse its connection.
+/// A plain SQL runner uses a fresh psql session per migration. SQLx and Supabase reuse connections.
 pub(crate) fn timelines(plan: &ParsedPlan) -> Vec<TransactionTimeline> {
-    let mut sqlx_connection_uncertain = false;
+    let mut connection_uncertain = None;
     plan.migrations
         .iter()
         .map(|migration| {
-            let sqlx = migration.identity.adapter == MigrationAdapter::Sqlx;
+            let adapter = migration.identity.adapter;
             let (timeline, leaves_uncertainty) =
-                timeline(migration, sqlx && sqlx_connection_uncertain);
-            sqlx_connection_uncertain |= sqlx && leaves_uncertainty;
+                timeline(migration, connection_uncertain == Some(adapter));
+            if reuses_connection(adapter) && leaves_uncertainty {
+                connection_uncertain = Some(adapter);
+            }
             timeline
         })
         .collect()
+}
+
+fn reuses_connection(adapter: MigrationAdapter) -> bool {
+    matches!(adapter, MigrationAdapter::Sqlx | MigrationAdapter::Supabase)
 }
 
 fn timeline(
@@ -105,7 +111,7 @@ fn timeline(
         .statements
         .chunk_by(|left, right| left.segment == right.segment)
     {
-        let implicit = match delivery {
+        let implicit = match segment[0].delivery {
             StatementDelivery::SingleQuery if segment.len() > 1 => {
                 Some(TransactionContext::ImplicitBatch)
             }
@@ -147,7 +153,7 @@ fn timeline(
         }
     }
 
-    let sqlx = migration.identity.adapter == MigrationAdapter::Sqlx;
+    let adapter = migration.identity.adapter;
     let end_effect = match state.context {
         TransactionContext::Runner => TransactionEffect::Commit,
         TransactionContext::Explicit
@@ -156,12 +162,16 @@ fn timeline(
             // The wrapper still sends its final COMMIT after an explicit chained command.
             TransactionEffect::Commit
         }
-        TransactionContext::Explicit if !sqlx => TransactionEffect::Rollback,
+        TransactionContext::Explicit if !reuses_connection(adapter) => TransactionEffect::Rollback,
         TransactionContext::Explicit => {
             if let Some(statement) = migration.statements.last() {
                 gaps.push(transaction_gap(
                     statement,
-                    "the SQLx migration leaves an explicit transaction open on the runner connection",
+                    if adapter == MigrationAdapter::Sqlx {
+                        "the SQLx migration leaves an explicit transaction open on the runner connection"
+                    } else {
+                        "the Supabase migration leaves an explicit transaction open on the runner connection"
+                    },
                 ));
             }
             TransactionEffect::Invalidate
@@ -327,6 +337,7 @@ fn first_missing_statement(migration: &ParsedMigration) -> Option<usize> {
                     | CoverageGapKind::InputLimitExceeded
                     | CoverageGapKind::ParseError
                     | CoverageGapKind::UnsupportedSql
+                    | CoverageGapKind::UnresolvedTransactionMode
             ) {
                 return None;
             }

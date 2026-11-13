@@ -1,6 +1,6 @@
 use dmg_core::{
     coverage::Coverage,
-    migration::{ExecutionMode, MigrationIdentity},
+    migration::{ExecutionMode, MigrationIdentity, StatementDelivery},
     risk::ObjectKind,
     source::{RepoPath, SourceSpan},
 };
@@ -26,8 +26,10 @@ pub struct ParsedMigration {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Statement {
     pub span: SourceSpan,
-    /// Original runner segment, numbered from zero.
+    /// Effective runner segment, numbered from zero.
     pub segment: usize,
+    /// Protocol delivery of this statement's effective runner segment.
+    pub delivery: StatementDelivery,
     pub operation: Operation,
 }
 

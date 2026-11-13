@@ -5,6 +5,7 @@ mod expression;
 mod normalize;
 mod operation;
 mod parse;
+mod supabase;
 mod version;
 
 pub use operation::*;
