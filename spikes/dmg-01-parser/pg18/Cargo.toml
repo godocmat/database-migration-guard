@@ -1,0 +1,9 @@
+[package]
+name = "dmg-pg18"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+pg_query = "=18.1.0"
+serde_json.workspace = true
