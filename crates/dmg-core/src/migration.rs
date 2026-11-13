@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     coverage::Coverage,
     digest::ContentDigest,
+    history::NativeHistoryMethod,
     source::{ByteRange, RepoPath},
 };
 
@@ -272,7 +273,15 @@ pub struct AppliedHistory {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AppliedHistoryBasis {
-    Manifest { digest: ContentDigest },
+    Manifest {
+        digest: ContentDigest,
+    },
+    Native {
+        digest: ContentDigest,
+        inventory_digest: ContentDigest,
+        adapter: MigrationAdapter,
+        method: NativeHistoryMethod,
+    },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
