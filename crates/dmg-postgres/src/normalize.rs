@@ -143,7 +143,16 @@ impl Normalizer<'_, '_> {
             Ast::AlterTableStmt(table) if table.objtype() == ObjectType::ObjectTable => {
                 self.alter_table(table, tokens, origin, location).map(Operation::AlterTable)
             }
-            Ast::RenameStmt(rename) => normalize_rename(rename).map(Operation::Rename),
+            Ast::RenameStmt(rename) => {
+                let action_span = tokens.iter().position(|token| token.text.eq_ignore_ascii_case("rename"))
+                    .and_then(|index| token_range(&tokens[index..]))
+                    .and_then(|range| span(self.map, self.base, range))
+                    .unwrap_or_else(|| {
+                        self.unsupported(location, "could not locate the RENAME action precisely");
+                        location.clone()
+                    });
+                normalize_rename(rename, action_span).map(Operation::Rename)
+            }
             Ast::DropStmt(drop) => normalize_drop(drop).map(Operation::Drop),
             Ast::TruncateStmt(truncate) => normalize_truncate(truncate).map(Operation::Truncate),
             Ast::IndexStmt(index) => {
@@ -389,6 +398,7 @@ impl Normalizer<'_, '_> {
                 value.contype(),
                 ConstrType::ConstrCheck | ConstrType::ConstrForeign
             ) || value.is_enforced,
+            no_inherit: value.is_no_inherit,
             deferrable: value.deferrable,
             initially_deferred: value.initdeferred,
         }
@@ -544,7 +554,7 @@ fn alter_action_ranges(
     (groups.len() == count).then_some(groups)
 }
 
-fn normalize_rename(rename: &RenameStmt) -> Option<Rename> {
+fn normalize_rename(rename: &RenameStmt, action_span: SourceSpan) -> Option<Rename> {
     let kind = match rename.rename_type() {
         ObjectType::ObjectTable => ObjectKind::Relation,
         ObjectType::ObjectColumn => ObjectKind::Column,
@@ -553,6 +563,7 @@ fn normalize_rename(rename: &RenameStmt) -> Option<Rename> {
         _ => return None,
     };
     Some(Rename {
+        action_span,
         object: relation(rename.relation.as_ref()?)?,
         kind,
         member: nonempty(&rename.subname),
