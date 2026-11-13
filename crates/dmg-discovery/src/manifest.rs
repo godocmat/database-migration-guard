@@ -5,7 +5,7 @@ use dmg_core::{
     digest::ContentDigest,
     migration::{
         AppliedHistory, AppliedHistoryBasis, AppliedMigration, AppliedStatus, FileDigest,
-        IntegrityBasis, MigrationAdapter, MigrationDirection, MigrationIdentity,
+        IntegrityBasis, MigrationAdapter, MigrationDirection, MigrationIdentity, MigrationVersion,
     },
     source::RepoPath,
 };
@@ -54,7 +54,7 @@ pub fn compare_integrity_manifest(
         return Err(ManifestError::WrongAdapter);
     }
     let mut baseline = BTreeMap::new();
-    let mut paths = BTreeSet::new();
+    let mut paths = BTreeMap::new();
     for entry in parsed.migrations {
         let identity = identity(options, entry.version)?;
         if !valid_path(&entry.path) {
@@ -69,23 +69,38 @@ pub fn compare_integrity_manifest(
             .ok()
             .flatten()
             .filter(|candidate| {
-                candidate.identity == identity && candidate.direction == entry.direction
+                candidate.identity == identity
+                    && candidate.supports_manifest_direction(entry.direction)
             });
         if candidate.is_none() || !options.roots.iter().any(|path| path.as_str() == root) {
             return Err(ManifestError::InvalidPath);
         }
-        if !paths.insert(entry.path.clone())
-            || baseline
-                .insert(
-                    (identity, entry.direction),
-                    FileDigest {
-                        path: entry.path,
-                        digest: entry.sha256,
-                    },
-                )
-                .is_some()
+        let source = (identity.clone(), entry.sha256);
+        if let Some(previous) = paths.insert(entry.path.clone(), source.clone())
+            && (adapter != MigrationAdapter::Goose || previous != source)
         {
             return Err(ManifestError::Duplicate);
+        }
+        if baseline
+            .insert(
+                (identity, entry.direction),
+                FileDigest {
+                    path: entry.path,
+                    digest: entry.sha256,
+                },
+            )
+            .is_some()
+        {
+            return Err(ManifestError::Duplicate);
+        }
+    }
+    if adapter == MigrationAdapter::Goose {
+        for ((identity, direction), file) in &baseline {
+            if *direction == MigrationDirection::Down
+                && baseline.get(&(identity.clone(), MigrationDirection::Forward)) != Some(file)
+            {
+                return Err(ManifestError::InvalidPath);
+            }
         }
     }
     if matches!(
@@ -200,12 +215,17 @@ pub fn reconcile_applied_manifest(
     Ok(())
 }
 
-fn identity(options: &DiscoveryOptions, version: i64) -> Result<MigrationIdentity, ManifestError> {
+fn identity(
+    options: &DiscoveryOptions,
+    version: MigrationVersion,
+) -> Result<MigrationIdentity, ManifestError> {
     let adapter = options.adapter.kind();
-    if matches!(options.adapter, Adapter::Plain(_)) && version <= 0 {
+    if matches!(adapter, MigrationAdapter::Plain | MigrationAdapter::Goose)
+        && version.as_numeric().is_none_or(|value| value <= 0)
+    {
         return Err(ManifestError::InvalidIdentity);
     }
-    Ok(MigrationIdentity { adapter, version })
+    MigrationIdentity::from_version(adapter, version).map_err(|_| ManifestError::InvalidIdentity)
 }
 
 fn parse<T: for<'de> Deserialize<'de>>(
@@ -240,7 +260,7 @@ struct Manifest<T> {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct IntegrityFile {
-    version: i64,
+    version: MigrationVersion,
     direction: MigrationDirection,
     path: RepoPath,
     sha256: ContentDigest,
@@ -249,7 +269,7 @@ struct IntegrityFile {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AppliedRecord {
-    version: i64,
+    version: MigrationVersion,
     sha256: ContentDigest,
     status: ManifestAppliedStatus,
 }

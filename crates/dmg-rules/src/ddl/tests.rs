@@ -29,7 +29,7 @@ fn analyze(target: PostgresTarget, sources: &[(&str, &str, ExecutionMode)]) -> c
                 } else {
                     MigrationAdapter::Plain
                 },
-                version: i64::try_from(index + 1).unwrap(),
+                version: i64::try_from(index + 1).unwrap().into(),
             },
             path: RepoPath::new(*name).unwrap(),
             direction: MigrationDirection::Forward,

@@ -105,10 +105,59 @@ fn computes_and_validates_original_byte_sha256() {
 }
 
 #[test]
+fn native_identities_preserve_ordering_and_wire_types() {
+    let flyway = |value| MigrationIdentity::flyway_version(value).unwrap();
+    let repeatable = |value| MigrationIdentity::flyway_repeatable(value).unwrap();
+    let supabase = |value| MigrationIdentity::supabase_version(value).unwrap();
+
+    assert_eq!(flyway("01.02_0"), flyway("1.2"));
+    assert!(flyway("1.2") < flyway("1.2.0.1"));
+    assert!(flyway("1.2.0.1") < flyway("1.10"));
+    assert!(flyway("1.10") < flyway("100000000000000000000000000000"));
+    assert!(flyway("100000000000000000000000000000") < repeatable("first"));
+    assert_eq!(repeatable("table_views"), repeatable("table views"));
+    assert!(repeatable("😀") < repeatable("ﬀ"));
+    assert!(repeatable("table_views").is_repeatable());
+    assert!(supabase("01") < supabase("1"));
+    assert!(supabase("10") < supabase("2"));
+
+    for (identity, adapter, kind, value) in [
+        (flyway("01.02_0"), "flyway", "flyway", "1.2"),
+        (
+            repeatable("table_views"),
+            "flyway",
+            "repeatable",
+            "table views",
+        ),
+        (supabase("01"), "supabase", "supabase", "01"),
+    ] {
+        let json = serde_json::to_value(&identity).unwrap();
+        assert_eq!(json["adapter"], adapter);
+        assert_eq!(json["version"]["kind"], kind);
+        assert_eq!(json["version"]["value"], value);
+        assert_eq!(
+            serde_json::from_value::<MigrationIdentity>(json).unwrap(),
+            identity
+        );
+    }
+
+    for (adapter, kind, value) in [
+        ("plain", "supabase", "01"),
+        ("supabase", "supabase", "1_2"),
+        ("flyway", "flyway", "1..2"),
+        ("flyway", "flyway", "9223372036854775807"),
+    ] {
+        let json =
+            serde_json::json!({"adapter": adapter, "version": {"kind": kind, "value": value}});
+        assert!(serde_json::from_value::<MigrationIdentity>(json).is_err());
+    }
+}
+
+#[test]
 fn distinguishes_git_provenance_and_sqlx_execution() {
     let identity = MigrationIdentity {
         adapter: MigrationAdapter::Sqlx,
-        version: 2,
+        version: 2.into(),
     };
     let digest = ContentDigest::of(b"SELECT 1;\n");
     let before = repo_path("migrations/002_old.up.sql");
@@ -148,6 +197,7 @@ fn distinguishes_git_provenance_and_sqlx_execution() {
 
     let encoded = serde_json::to_value(&plan).unwrap();
     assert_eq!(encoded["integrity"]["basis"]["kind"], "git");
+    assert_eq!(encoded["inventory"][0]["identity"]["version"], 2);
     assert_ne!(
         encoded["integrity"]["changes"][0]["before"]["path"],
         encoded["integrity"]["changes"][0]["after"]["path"]
@@ -228,7 +278,7 @@ fn finding(start: usize, end: usize, severity: Severity, rule_id: RuleId) -> Fin
         rule_id,
         migration: MigrationIdentity {
             adapter: MigrationAdapter::Plain,
-            version: 1,
+            version: 1.into(),
         },
         object: None,
         fingerprint: ContentDigest::of(rule_id.to_string().as_bytes()),

@@ -255,7 +255,30 @@ impl PlainTransaction {
 struct Candidate {
     identity: MigrationIdentity,
     direction: MigrationDirection,
+}
+
+impl Candidate {
+    fn supports_manifest_direction(&self, direction: MigrationDirection) -> bool {
+        self.direction == direction || self.identity.adapter == MigrationAdapter::Goose
+    }
+}
+
+struct SourceLayout {
+    direction: MigrationDirection,
+    source_segments: Vec<ByteRange>,
     execution: ExecutionMode,
+}
+
+impl SourceLayout {
+    fn whole_file(direction: MigrationDirection, execution: ExecutionMode, bytes: &[u8]) -> Self {
+        Self {
+            direction,
+            source_segments: vec![
+                ByteRange::new(0, bytes.len()).expect("file offsets start at zero"),
+            ],
+            execution,
+        }
+    }
 }
 
 impl Adapter {
@@ -279,13 +302,39 @@ impl Adapter {
             .and_then(|capture| plain.version_order.version(capture.as_str()))
             .ok_or("matched plain SQL filename has no supported migration version")?;
         Ok(Some(Candidate {
-            identity: MigrationIdentity {
-                adapter: MigrationAdapter::Plain,
-                version,
-            },
+            identity: MigrationIdentity::numeric(MigrationAdapter::Plain, version),
             direction: MigrationDirection::Forward,
-            execution: plain.transaction.execution(),
         }))
+    }
+
+    fn source_layouts(
+        &self,
+        candidate: &Candidate,
+        path: &RepoPath,
+        bytes: &[u8],
+    ) -> (Vec<SourceLayout>, Option<CoverageGap>) {
+        let mut gap = None;
+        let execution = match self {
+            Self::Plain(plain) => plain.transaction.execution(),
+            Self::Sqlx(_) => {
+                if std::str::from_utf8(bytes).is_err() {
+                    gap = Some(coverage_gap(
+                        CoverageGapKind::UnsupportedInput,
+                        Some(path),
+                        "SQLx requires migration files to contain UTF-8",
+                    ));
+                }
+                sqlx::execution(bytes)
+            }
+        };
+        (
+            vec![SourceLayout::whole_file(
+                candidate.direction,
+                execution,
+                bytes,
+            )],
+            gap,
+        )
     }
 }
 
@@ -298,30 +347,23 @@ struct Inventory {
 }
 
 impl Inventory {
-    fn add(&mut self, candidate: Candidate, path: RepoPath, bytes: Vec<u8>) {
-        let source_segment = ByteRange::new(0, bytes.len()).expect("file offsets start at zero");
-        let is_sqlx = candidate.identity.adapter == MigrationAdapter::Sqlx;
-        let execution = if is_sqlx {
-            sqlx::execution(&bytes)
-        } else {
-            candidate.execution
-        };
-        if is_sqlx && std::str::from_utf8(&bytes).is_err() {
-            self.gaps.push(coverage_gap(
-                CoverageGapKind::UnsupportedInput,
-                Some(&path),
-                "SQLx requires migration files to contain UTF-8",
-            ));
-        }
-        self.files.push(MigrationFile {
-            identity: candidate.identity,
-            direction: candidate.direction,
-            digest: ContentDigest::of(&bytes),
-            path: path.clone(),
-            source_segments: vec![source_segment],
-            execution,
-        });
+    fn add(&mut self, adapter: &Adapter, candidate: Candidate, path: RepoPath, bytes: Vec<u8>) {
         self.bytes_read += bytes.len();
+        let (layouts, gap) = adapter.source_layouts(&candidate, &path, &bytes);
+        self.gaps.extend(gap);
+        if layouts.is_empty() {
+            return;
+        }
+        let digest = ContentDigest::of(&bytes);
+        self.files
+            .extend(layouts.into_iter().map(|layout| MigrationFile {
+                identity: candidate.identity.clone(),
+                direction: layout.direction,
+                digest,
+                path: path.clone(),
+                source_segments: layout.source_segments,
+                execution: layout.execution,
+            }));
         self.sources.insert(path, bytes);
     }
 

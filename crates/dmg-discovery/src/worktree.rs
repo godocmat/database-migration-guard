@@ -150,7 +150,9 @@ fn collect_file(
         return;
     }
     match read_file(directory, filename, budget) {
-        Ok(bytes) if bytes.len() <= budget => inventory.add(candidate, path, bytes),
+        Ok(bytes) if bytes.len() <= budget => {
+            inventory.add(&options.adapter, candidate, path, bytes)
+        }
         Ok(_) => inventory.gaps.push(coverage_gap(
             CoverageGapKind::InputLimitExceeded,
             Some(&path),

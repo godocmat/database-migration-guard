@@ -183,7 +183,10 @@ fn transaction_conflict(
                 MigrationAdapter::Sqlx => {
                     "Put this operation alone in an SQLx migration with -- no-transaction at byte zero."
                 }
-                MigrationAdapter::Plain => {
+                MigrationAdapter::Goose => {
+                    "Use a Goose NO TRANSACTION migration and put the index operation in its own query."
+                }
+                MigrationAdapter::Plain | MigrationAdapter::Flyway | MigrationAdapter::Supabase => {
                     "Run this operation as an autocommit statement outside the migration's transaction block."
                 }
             };
@@ -214,6 +217,10 @@ fn transaction_conflict(
         TransactionContext::ImplicitBatch => (
             "The runner sends multiple statements in one simple Query, so PostgreSQL opens an implicit transaction block.",
             "PostgreSQL rejects the command and can roll back earlier changes in this implicit block.",
+        ),
+        TransactionContext::ExtendedBatch => (
+            "The runner submits an extended-query batch in an implicit transaction block.",
+            "PostgreSQL rejects the command and can roll back earlier changes in this batch.",
         ),
         TransactionContext::Standalone | TransactionContext::Unknown => (
             "The statement has no regular transaction block available.",
@@ -560,15 +567,14 @@ mod tests {
 
     fn parse(version: i64, sql: &str, execution: ExecutionMode) -> ParsedMigration {
         let file = MigrationFile {
-            identity: MigrationIdentity {
-                adapter: if execution == ExecutionMode::SQLX_TRANSACTION
-                    || execution == ExecutionMode::SQLX_NO_TRANSACTION
-                {
-                    MigrationAdapter::Sqlx
-                } else {
-                    MigrationAdapter::Plain
-                },
-                version,
+            identity: match execution {
+                ExecutionMode::SUPABASE_BATCH => {
+                    MigrationIdentity::supabase_version(&version.to_string()).unwrap()
+                }
+                ExecutionMode::SQLX_TRANSACTION | ExecutionMode::SQLX_NO_TRANSACTION => {
+                    MigrationIdentity::numeric(MigrationAdapter::Sqlx, version)
+                }
+                _ => MigrationIdentity::numeric(MigrationAdapter::Plain, version),
             },
             path: RepoPath::new(format!("migrations/{version}.sql")).unwrap(),
             direction: MigrationDirection::Forward,
@@ -655,6 +661,28 @@ mod tests {
             assert!(gaps.is_empty(), "{sql}: {gaps:#?}");
             assert_rules(&findings, if expected { &[Rule::Pg007] } else { &[] });
         }
+    }
+
+    #[test]
+    fn extended_batch_groups_statements_and_has_no_explicit_savepoint_scope() {
+        let ddl = "ALTER TABLE app.accounts ADD COLUMN note text;";
+        let update = "UPDATE app.accounts SET note = 'existing';";
+        let (findings, gaps) = analyze(vec![parse(
+            1,
+            &format!("{ddl} {update}"),
+            ExecutionMode::SUPABASE_BATCH,
+        )]);
+        assert!(gaps.is_empty());
+        assert_rules(&findings, &[Rule::Pg006, Rule::Pg007]);
+
+        let (findings, gaps) = analyze(vec![parse(
+            1,
+            &format!("{ddl} SAVEPOINT boundary;"),
+            ExecutionMode::SUPABASE_BATCH,
+        )]);
+        assert!(gaps.is_empty());
+        assert_rules(&findings, &[Rule::Pg007]);
+        assert!(findings[0].explanation.contains("savepoint"));
     }
 
     #[test]
