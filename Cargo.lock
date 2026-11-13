@@ -208,6 +208,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dmg-rules"
+version = "0.1.0"
+dependencies = [
+ "dmg-core",
+ "dmg-discovery",
+ "dmg-postgres",
+ "serde",
+]
+
+[[package]]
 name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

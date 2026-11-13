@@ -1,0 +1,15 @@
+[package]
+name = "dmg-rules"
+description = "Deterministic PostgreSQL migration risk rules for Database Migration Guard"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+dmg-core = { path = "../dmg-core" }
+dmg-postgres = { path = "../dmg-postgres" }
+serde.workspace = true
+
+[dev-dependencies]
+dmg-discovery = { path = "../dmg-discovery" }
