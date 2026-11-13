@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 mod config;
+mod diff;
 mod policy;
 mod render;
 
@@ -70,6 +71,8 @@ enum Command {
         #[arg(long, value_name = "FILE")]
         policy: PathBuf,
     },
+    /// Compare saved PostgreSQL schemas and application contracts.
+    Diff(diff::DiffArgs),
     /// Render a saved versioned JSON report for review.
     Report {
         /// Saved JSON report.
@@ -220,6 +223,7 @@ fn run(command: Command) -> Result<u8, Failure> {
                 .map_err(|error| Failure::invalid(error.to_string()))?;
             run_analysis(analysis, Some(&policy))
         }
+        Command::Diff(args) => diff::run(args),
         Command::Report {
             input,
             format,
