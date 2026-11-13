@@ -50,4 +50,34 @@ python -B fixtures/dmg-15/benchmark.py --binary $binary --source-commit 22d9b06e
 | SARIF | 0.112 | 0.173 | 0.186 | 33.86 |
 | GitLab Code Quality | 0.064 | 0.065 | 0.066 | 33.86 |
 
-The four-process run had a maximum sum of individual working-set peaks of 432.91 MiB. The serial scan produced 2,500 findings with complete coverage. The [raw evidence](evidence/windows-22d9b06.json) includes the warmups and each measured invocation. The 15-second p95 and 512-MiB maximum RSS planning thresholds apply to a Linux x86-64 runner with 2 vCPUs and 8 GiB of memory. Linux execution and release budget acceptance remain pending.
+The four-process run had a maximum sum of individual working-set peaks of 432.91 MiB. The serial scan produced 2,500 findings with complete coverage. The [raw evidence](evidence/windows-22d9b06.json) includes the warmups and each measured invocation.
+
+## Linux baseline
+
+The Linux x86-64 run used an offline Ubuntu 24.04.5 LTS guest with kernel `6.8.0-147-generic` and glibc 2.39. QEMU 11.1.0 used Windows Hypervisor Platform on the shared AMD Ryzen 5 5600X host. The guest had two vCPUs, 8 GiB of assigned memory (7.76 GiB usable), zero swap, and only the loopback interface. Its root disk was ext4 on a fresh QCOW2 overlay. The harness and children ran on guest CPUs 0 and 1 as an unprivileged user with a temporary home. The harness measured RSS with GNU time and used a 60-second deadline per command. No other QEMU guest ran during the measurement. Host CPU contention and disk cache can affect the results.
+
+The executable was cross-built from `af2140159686067995a4d374ea824400f5453d07` with locked dependencies, Rust 1.100.0 (0ef1bc386), cargo-zigbuild 0.23.4, and Zig 0.16.0 targeting glibc 2.39. It reports `dmg 0.1.0`, measures 13,755,848 bytes, and has SHA-256 `525d29a03b399bf622ce07fb383d8326610cdff4970836a78f157aa5ec3fe4dd`. The guest used Git 2.43.0 and Python 3.12.3. The run used this argument set with the verified installed binary and a new local evidence file.
+
+~~~sh
+python3 -B fixtures/dmg-15/benchmark.py \
+  --binary "$binary" --source-commit af2140159686067995a4d374ea824400f5453d07 \
+  --rustc-version '1.100.0 (0ef1bc386 2026-11-09)' --scratch "$scratch" \
+  --output "$output" --cpu-ids 0 1 --runs 30
+~~~
+
+| Workload | p50 (s) | p95 (s) | Max (s) | Peak per CLI (MiB) |
+| --- | ---: | ---: | ---: | ---: |
+| Worktree scan | 1.013 | 1.389 | 1.674 | 105.88 |
+| Four concurrent scans | 2.184 | 2.577 | 2.650 | 105.88 |
+| 8-MiB Goose script | 0.107 | 0.112 | 0.113 | 27.08 |
+| Catalog diff | 0.171 | 0.181 | 0.182 | 25.01 |
+| HTML | 0.049 | 0.053 | 0.056 | 28.00 |
+| Markdown | 0.045 | 0.051 | 0.053 | 28.00 |
+| SARIF | 0.130 | 0.141 | 0.144 | 28.38 |
+| GitLab Code Quality | 0.073 | 0.086 | 0.086 | 28.25 |
+
+The 5,000-file, 50-MiB scan met the 15-second p95 and 512-MiB peak RSS planning budgets and produced 2,500 findings with complete coverage. Each concurrent process produced the same report digest. The largest sum of four individual RSS peaks was 423.50 MiB. The [raw evidence](evidence/linux-af21401.json) includes the warmups and each measured invocation. Its SHA-256 matched the guest value `0f6dc570f57cead8107b2c34303a2d844f0546b17757ba88f890f6b699309fe1` after transfer.
+
+### Offline installation and rollback
+
+After timing completed, the guest switched an installed executable path from the retained `c4974cd` Linux pilot to the exact cross-built candidate. Both executable hashes were verified against their pinned values before execution. The candidate passed the installed smoke test for exits 0, 1, and 3 with saved HTML, SARIF, and GitLab Code Quality reports. It also passed the three GitHub replay outcomes, all ten GitLab replay tests, and all 130 public CLI checks, comprising 48 passes, 58 denials, and 24 incomplete outcomes. Restoring the prior executable reproduced its three original GitHub outcomes. The temporary test fixtures were removed and the guest powered down normally. [Release checks](../../docs/release.md#verify-and-smoke-test-an-installation)
