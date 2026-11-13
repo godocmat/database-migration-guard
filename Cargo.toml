@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/dmg-core"]
+members = ["crates/dmg-core", "crates/dmg-discovery"]
 exclude = ["spikes/dmg-01-parser"]
 resolver = "3"
 
