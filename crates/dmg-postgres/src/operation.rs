@@ -45,6 +45,7 @@ pub enum Operation {
     CreateIndex(CreateIndex),
     Update(DataChange),
     Delete(DataChange),
+    Insert(RelationName),
     Transaction(Transaction),
     /// A SELECT of supported literal expressions.
     Select,
@@ -161,6 +162,7 @@ pub struct Constraint {
     pub columns: Vec<String>,
     pub kind: ConstraintKind,
     pub not_valid: bool,
+    pub enforced: bool,
     pub deferrable: bool,
     pub initially_deferred: bool,
 }
