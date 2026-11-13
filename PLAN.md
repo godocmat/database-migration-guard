@@ -319,11 +319,13 @@ DMG-08 local implementation is integrated. The Windows x64 and Ubuntu 24.04 x64 
 
 DMG-09 is integrated for the documented SQL profiles. The CLI supports Flyway OSS 13.12.2 versioned and repeatable migrations, Goose 3.30.1 combined Up and Down files, and Supabase CLI 3.0.0 lexical versions. Native probes on PostgreSQL 17.12 and 18.7 establish supported ordering and transaction behavior. The adapters preserve original file digests and report incomplete coverage when runner settings or SQL prevent reliable analysis. [Migration formats and coverage](docs/migration-formats.md) · [Shared contract](DECISIONS.md#dmg-09-adapter-contracts)
 
-DMG-10 has versioned inspection evidence, bounded TLS catalog and native history reads, and native history reconciliation. Both readers passed restricted-role TLS fixtures on PostgreSQL 15.20, 16.16, 17.12, and 18.7. CLI integration is in progress. [Inspection verification status](PROGRESS.md#dmg-10-inspection-and-native-history)
+DMG-10 has versioned inspection evidence, bounded TLS catalog and native history reads, and native history reconciliation. Both readers passed restricted-role TLS fixtures on PostgreSQL 15.20, 16.16, 17.12, and 18.7. The inspection CLI and offline import of pinned history are integrated. [Inspection verification status](PROGRESS.md#dmg-10-inspection-and-native-history)
 
-DMG-11 structural comparison and application contract evaluation are integrated. Expected-to-current and current-to-target comparisons retain partial coverage and require a reviewed mapping for renames. The CLI and live snapshot workflow verification are in progress. [Schema comparison and contract status](PROGRESS.md#dmg-11-schema-diff-and-application-contracts)
+DMG-11 structural comparison and application contract evaluation are integrated through `dmg diff`. Expected-to-current and current-to-target comparisons retain partial coverage and require a reviewed mapping for renames. Live snapshot workflow verification is in progress. [Schema comparison and contract status](PROGRESS.md#dmg-11-schema-diff-and-application-contracts)
 
-DMG-12 worker provisioning is integrated. The Linux x86-64 worker verified isolation and removal on PostgreSQL 15.20, 16.16, 17.12, and 18.7. Framework-aware migration execution and revision-bound results have a separate assignment. [Worker verification](PROGRESS.md#dmg-12-disposable-postgresql-worker)
+DMG-12 worker provisioning and revision-bound execution are integrated in the rehearsal library. The Linux x86-64 worker verified isolation and removal on PostgreSQL 15.20, 16.16, 17.12, and 18.7. The runner execution fixture passed against a separate native PostgreSQL 18.7 cluster. Full rehearsal on the isolated workers and the simulation command are pending. [Worker and execution verification](PROGRESS.md#dmg-12-disposable-postgresql-worker)
+
+DMG-13 trusted baselines, scoped approvals, and rehearsal evidence checks are integrated. DMG-14 saved analysis renders HTML, SARIF, and GitLab Code Quality alongside existing formats. [Policy and report verification](PROGRESS.md#dmg-13-policy-evidence-and-dmg-14-report-formats)
 
 ## 19. Risk register
 

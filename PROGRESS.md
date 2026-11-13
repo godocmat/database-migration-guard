@@ -41,9 +41,11 @@ The Rust catalog collector passed six restricted-role TLS scenarios on each of t
 
 The native history reader passed its three fixture groups on each major over verified TLS. The fixtures cover all four supported history shapes, column-only grants, empty versus unavailable history, bounded contention, and concurrent replacement of the designated table. The Flyway undo record is synthetic. The refactored transport and catalog collector also passed their PostgreSQL 18.7 TLS fixtures on `ad8a76b`. [History reader verification](docs/postgresql-history.md)
 
+`dmg inspect` and offline pinned history import landed at `2ef5b6b`. The restricted-role PostgreSQL 18.7 CLI fixture verified scoped catalogs, incomplete access, invalid CA, target mismatch, bounded projections, and SQLx history. Windows tests verified exact Git candidate binding, raw file pinning, and unavailable history. Catalog and history are independent reads. [CLI workflow](docs/inspect.md)
+
 ## DMG-11 schema diff and application contracts
 
-The core schema comparison distinguishes incomplete coverage from known absence and requires reviewed rename mappings. The application evaluator checks exact deployed dependencies for type, nullability, and structural write regressions. The Windows focused suites passed nine diff cases and eight application-contract cases. Live snapshot comparison through the CLI is pending. [Schema diff](docs/diff.md) · [Application contracts](docs/application-contracts.md)
+The core schema comparison distinguishes incomplete coverage from known absence and requires reviewed rename mappings. The application evaluator checks exact deployed dependencies for type, nullability, and structural write regressions. Windows verification passed nine diff, eight application-contract, and four dedicated `dmg diff` cases. Live snapshot comparison through the CLI is in progress. [Schema diff](docs/diff.md) · [Application contracts](docs/application-contracts.md)
 
 ## PostgreSQL 15 and 16 target verification
 
@@ -55,4 +57,12 @@ The expanded CLI accepted common DDL on targets 15 and 16 and returned incomplet
 
 ## DMG-12 disposable PostgreSQL worker
 
-The worker at `dfb48f9` passed the Rust lifecycle test against each pinned PostgreSQL image, from 15.20 through 18.7, on isolated Docker Engine 29.9.3 daemons in WSL2. The tests verified effective namespace and resource controls, restricted authentication, and removal after successful SQL, rollback, server and client deadlines, injected bootstrap failure, and cancellation with an active runtime. The Windows build passed with the explicit unsupported-platform path. Hosted Docker and cgroup v2 verification are pending, as are migration execution and evidence. [Worker controls and image pins](docs/research/simulation-worker.md)
+The worker at `dfb48f9` passed the Rust lifecycle test against each pinned PostgreSQL image, from 15.20 through 18.7, on isolated Docker Engine 29.9.3 daemons in WSL2 with cgroup v1. The tests verified effective namespace and resource controls, restricted authentication, and removal after successful SQL, rollback, server and client deadlines, injected bootstrap failure, and cancellation with an active runtime. The Windows build passed with the explicit unsupported-platform path. [Worker controls and image pins](docs/research/simulation-worker.md)
+
+Revision-bound rehearsal and runner delivery landed at `abb1975`. The loopback native Windows PostgreSQL 18.7 fixture passed nine runner and transaction cases plus server cancellation. It verified the raw protocol and execution core. The final Linux execution build, end-to-end Docker rehearsal on PostgreSQL 15–18, and cgroup v2 lifecycle tests are pending. The initial Linux execution API compiled before the final protocol changes. [Rehearsal profile and verification](docs/simulation.md)
+
+## DMG-13 policy evidence and DMG-14 report formats
+
+`dd5d589` verifies protected exact-byte pins, reproduces baseline findings from the reviewed Git reference, audits exact scoped approvals and expiry, and independently reconstructs the rehearsal plan from Git. Windows workspace tests, Clippy, and the local GitHub replay passed. The policy acceptance fixtures used saved rehearsal evidence. The protected publisher supplies the approved worker binding and exact artifact pin. [Policy evidence workflow](docs/policy-evidence.md)
+
+`d650aac` renders saved analysis as HTML, SARIF 2.1.0, and GitLab Code Quality. The focused Windows CLI and renderer tests passed. Four fixture reports passed the OASIS SARIF schema and local HTML and Code Quality checks. Hosted ingestion and standalone diff and rehearsal rendering are pending. [Report format and limits](docs/report-formats.md)
