@@ -3,33 +3,19 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
-
-VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?")
-TARGETS = {
-    "x86_64-pc-windows-msvc": ".exe",
-    "x86_64-unknown-linux-gnu": "",
-    "aarch64-apple-darwin": "",
-}
+from package_common import MAX_BINARY_BYTES, TARGETS, VERSION, binary_name, sha256
 
 
 def command(*args, cwd=None):
     return subprocess.run(args, cwd=cwd, check=True, timeout=30, stdin=subprocess.DEVNULL,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout.strip()
-
-
-def sha256(path):
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def stage(source, output, target, binary):
@@ -39,7 +25,7 @@ def stage(source, output, target, binary):
     output_parent = output.parent.resolve(strict=True)
     if output.exists() or output.is_symlink():
         raise ValueError("Choose a new output directory for the pilot package.")
-    if not binary.is_file() or not 0 < binary.stat().st_size <= 64 * 1024 * 1024:
+    if not binary.is_file() or not 0 < binary.stat().st_size <= MAX_BINARY_BYTES:
         raise ValueError("The pilot binary must be an ordinary file of at most 64 MiB.")
 
     commit = command("git", "rev-parse", "--verify", "HEAD^{commit}", cwd=source)
@@ -64,7 +50,7 @@ def stage(source, output, target, binary):
         if len(fields) != 2 or fields[0] != "dmg" or not VERSION.fullmatch(fields[1]):
             raise ValueError("The staged executable did not report the expected dmg version.")
         version = fields[1]
-        executable = executable.rename(bundle / f"dmg-{version}-{target}{suffix}")
+        executable = executable.rename(bundle / binary_name(version, target))
         digest = sha256(executable)
 
         manifest = {"schema_version": 1, "name": "dmg", "version": version,

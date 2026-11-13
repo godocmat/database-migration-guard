@@ -1,0 +1,121 @@
+# Release preparation
+
+A local candidate is ready for review after its native package, smoke checks, and evidence have been staged. Publication requires the release owner's approval and completion of the acceptance matrix. [Implementation plan](../PLAN.md#15-deployment-and-release-strategy)
+
+## Build a native candidate
+
+Use a clean checkout of the exact reviewed commit on the target platform. Install Git 2.43 or newer, Python 3.11 or newer with its latest maintenance fixes, and the platform's [native parser prerequisites](../CONTRIBUTING.md#native-postgresql-parser). Use the toolchain in the checked-in rust-toolchain.toml and the reviewed cargo-cyclonedx 0.5.9 binary. Verify the generator download with the producer's release attestation before using it. Record the OS image, Rust toolchain, Git, C compiler and linker, libclang, and any build flags or profile overrides in the release record. [cargo-cyclonedx release](https://github.com/CycloneDX/cyclonedx-rust-cargo/releases/tag/cargo-cyclonedx-0.5.9)
+
+Fetch the locked Cargo dependencies before the offline build. Run from the staging scripts' checkout and set the source to the reviewed build checkout. Choose a protected output parent directory that already exists. For an Ubuntu 24.04 x86-64 candidate:
+
+~~~sh
+TARGET=x86_64-unknown-linux-gnu
+LIBCLANG_PATH=/usr/lib/llvm-18/lib
+export LIBCLANG_PATH
+cargo fetch --locked --target "$TARGET" --manifest-path "$BUILD_SOURCE/Cargo.toml"
+python3 -B scripts/stage-release.py stage \
+  --source "$BUILD_SOURCE" --expected-commit "$REVIEWED_COMMIT" --target "$TARGET" \
+  --cyclonedx "$CYCLONEDX_EXE" --output "$PACKAGE_DIR"
+~~~
+
+On Windows PowerShell, select x86_64-pc-windows-msvc with the MSVC developer environment and the Windows LLVM directory. On macOS arm64, select aarch64-apple-darwin with the Xcode tools and arm64 LLVM. Pass arguments to Python in the same order. The staging command verifies the commit, checkout cleanliness and native Rust host, then builds from the tracked Git archive with the locked offline release profile. This keeps ignored build files and checkout-specific newline conversion out of the source snapshot. It sets SOURCE_DATE_EPOCH from the source commit and remaps the source, build and Cargo cache paths for Rust and C. On Windows MSVC it also uses deterministic C path mapping and linker options. Supply any additional Rust flags through CARGO_ENCODED_RUSTFLAGS when an argument contains spaces.
+
+| Package file | Contents |
+| --- | --- |
+| dmg-VERSION-TARGET[.exe] | Native release executable |
+| package.json | Commit, source timestamp, target, compiler version, lock, toolchain and SBOM generator hashes, and exact executable and SBOM sizes and hashes |
+| dmg.cdx.json | CycloneDX 1.5 inventory for the target with artifact and source provenance |
+| SHA256SUMS | SHA-256 values for the executable, SBOM and package.json |
+
+Save the package.json digest printed by the command through a trusted review channel. The manifest documents a local build. Signed attestations identify the official build workflow. Rebuild with matching OS image, linker, SDK, compiler flags, and pinned inputs, then compare the unsigned executable and SBOM SHA-256 values. Record any mismatch before promotion.
+
+### SBOM and notices
+
+The native SBOM combines the locked cargo-cyclonedx inventory with packages Cargo compiled during this clean build. Target sources are marked required and host-only build dependencies are marked excluded. The record identifies relevant vendored PostgreSQL parser and cryptographic code and replaces workspace file URIs with stable local component identifiers. Its incomplete composition reflects the scope of a source inventory. Validate it against the CycloneDX 1.5 JSON schema or with a reviewed cyclonedx-cli validate --input-version v1_5 --fail-on-errors invocation. Optimized binary contents, the Rust toolchain and standard library, dynamic system libraries, host Git, and deployment components need separate evidence. [CycloneDX 1.5](https://github.com/CycloneDX/specification/blob/1.5/schema/bom-1.5.schema.json) · [CycloneDX CLI](https://github.com/CycloneDX/cyclonedx-cli#validate-command)
+
+Review imported native libraries on each platform with a native inspection tool such as dumpbin /DEPENDENTS, readelf -d, or otool -L. Record and verify the expected OS runtimes on the clean test host, including the installed Visual C++ runtime where applicable. Review registry package licenses and compile the required redistribution notices for the exact release. Include the pinned parser's upstream licenses and vendored notices and the ring native source notices. For the CLI image, generate a separate filesystem SBOM with a reviewed Syft release or equivalent and retain the application SBOM for the executable. Scan the final locked Cargo graph and the image packages with reviewed advisory sources and record their database revisions. [Parser notices](research/postgresql-parser.md#build-and-redistribution-evidence) · [Ring notices](https://docs.rs/crate/ring/0.17.14/source/LICENSE) · [Syft documentation](https://oss.anchore.com/docs/overview/sbom/)
+
+The project license and final redistribution notices are pending an owner decision. Resolve both before distributing the release. [Release acceptance](../PLAN.md#20-definition-of-done)
+
+## Verify and smoke test an installation
+
+Verify the manifest against the digest supplied through the trusted review channel before running the executable. The verifier checks the executable and SBOM and compares SHA256SUMS with the verified package. Use the staging scripts from a trusted checkout. They require Python for verification. The installed executable does not require Python or Rust.
+
+~~~sh
+python3 -B scripts/stage-release.py verify \
+  --package "$PACKAGE_DIR" --manifest-sha256 "$PACKAGE_MANIFEST_SHA256"
+~~~
+
+On the clean host for the selected native target, install the verified executable in a separate directory. Supply local Git for revision checks. Keep the host offline after staging the reviewed package and prerequisites. Use the installed path for the following test. The smoke script creates its own repository, checks exact Git revisions and exercises pass, deny and incomplete status, then renders the saved analysis as HTML, SARIF and GitLab Code Quality. Each replay uses temporary local files and synthetic migrations.
+
+~~~sh
+"$INSTALLED_DMG" --version
+python3 -B scripts/smoke-release.py "$INSTALLED_DMG"
+python3 -B integrations/github/tests/replay.py --binary "$INSTALLED_DMG"
+python3 -B integrations/gitlab/tests/replay.py --binary "$INSTALLED_DMG"
+~~~
+
+For an upgrade test, keep the previous verified executable and its exact Git, policy, and evidence pins. Run the same smoke test with both versions and check any expected rule changes in the release notes before updating a protected workflow. Update the binary and checksum together. For a rollback, restore the prior executable and its exact pins from the previous verified release and re-run the gate on the current reviewed revisions.
+
+## Linux x86-64 CLI container
+
+Start with the verified Linux x86-64 executable built on the documented glibc baseline. Use a minimal build context containing only the binary named dmg. The [Containerfile](../integrations/cli/Containerfile) pins the upstream Linux x86-64 Ubuntu 24.04 SCM image containing Git, checks the executable digest and records the reviewed source commit. It runs as UID and GID 65532 by default. This CLI image and the [GitLab job image](gitlab-ci.md#prepare-the-pinned-image) have different entry points.
+
+~~~sh
+context="$(mktemp -d)"
+install -m 0555 "$VERIFIED_LINUX_DMG" "$context/dmg"
+docker build --platform linux/amd64 --network none \
+  --file integrations/cli/Containerfile \
+  --build-arg "DMG_BINARY_SHA256=$DMG_BINARY_SHA256" \
+  --build-arg "DMG_SOURCE_COMMIT=$REVIEWED_COMMIT" \
+  --tag dmg:review "$context"
+~~~
+
+Fetch the pinned base before building on a disconnected host. Verify the image's manifest digest, architecture, base, entry point, default user, and executable and inspect its image SBOM. Use the reviewed image by digest after promotion. Smoke test --version and a representative offline check. With a Linux checkout owned by the invoking nonroot user, run the container using that UID and GID so Git recognizes the source owner. Use a read-only checkout mount and send the report to stdout. Use a complete local checkout with its .git directory for this example.
+
+~~~sh
+docker run --rm --network none dmg:review --version
+docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev,mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --user "$(id -u):$(id -g)" --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
+  dmg:review check --repo /workspace --config /workspace/.dmg/dmg.toml \
+  --policy /workspace/.dmg/policy.toml --base "$BASE_SHA" --head "$HEAD_SHA" \
+  --format json > report.json
+~~~
+
+Use trusted policy and config files in the checkout in this example. Mount separate protected inputs when the source checkout is untrusted. Keep worker access separate. Use the native Linux CLI with an explicitly selected isolated Docker worker for rehearsal. [Rehearsal setup](simulation.md#run-from-the-cli)
+
+## Attest and verify approved artifacts
+
+Have the release owner build and attest the exact artifacts from the reviewed source in a protected workflow. Keep build and verification jobs read-only. Grant OIDC signing and attestation permissions only to the authorized attestation job and registry or release write access only to the authorized publishing job. Pin actions to reviewed commit IDs. Attest the binary and package.json as build outputs, bind the SBOM to the binary with an SBOM attestation, and attest the image using its immutable registry digest. Keep the approved workflow identity, source commit, artifact digests and signed evidence with the release. [GitHub artifact attestations](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations)
+
+In a GitHub Actions-based release, use the separately published trusted repository, workflow and full source commit when verifying. For offline verification, acquire the attestation bundles and trusted roots before disconnecting and follow the GitHub CLI instructions for local bundles.
+
+~~~sh
+gh attestation verify "$VERIFIED_NATIVE_DMG" --repo "$RELEASE_REPO" \
+  --signer-workflow "$RELEASE_WORKFLOW" --source-digest "$REVIEWED_COMMIT"
+gh attestation verify "$PACKAGE_DIR/package.json" --repo "$RELEASE_REPO" \
+  --signer-workflow "$RELEASE_WORKFLOW" --source-digest "$REVIEWED_COMMIT"
+gh attestation verify "oci://$IMAGE_REF_BY_DIGEST" --repo "$RELEASE_REPO" \
+  --signer-workflow "$RELEASE_WORKFLOW" --source-digest "$REVIEWED_COMMIT"
+~~~
+
+Verify the SBOM attestation's predicate type and confirm that its document matches the package SBOM. Use the attested package.json digest for local package verification. Verify downloads before installation or use in CI. [GitHub CLI verification options](https://cli.github.com/manual/gh_attestation_verify)
+
+## Acceptance matrix
+
+Record the exact source revision, artifact SHA-256 or OCI digest, environment, and commands for each final check. Existing evidence applies to the revisions listed in [PROGRESS.md](../PROGRESS.md).
+
+| Release check | Evidence and remaining work |
+| --- | --- |
+| Static analysis and supported adapters on PostgreSQL 15–18 | Local parser, native runner fixtures, public CLI checks and independent holdout rescore recorded. Rerun on the final integrated candidate. |
+| Authorized inspection and schema comparison | Restricted-role TLS inspection, native history and Windows inspection-to-diff matrix recorded across PostgreSQL 15–18. |
+| Disposable rehearsal | Docker worker lifecycle previously checked on PostgreSQL 15–18 with cgroup v1. Full rehearsal matrix and cgroup v2 lifecycle remain pending. |
+| Policy and report formats | Windows tests, fixture replay and OASIS SARIF validation recorded. Hosted consumption remains pending. |
+| Protected GitHub and GitLab | Local replays and template validation recorded. Verify real protected merges, fork behavior and artifact retention in the configured CI providers. |
+| Windows x86-64 package | Provisional native stage at ae83f53 passed independent package-pin verification, CycloneDX 1.5 validation and local install smoke. Clean disconnected host and final candidate verification remain pending. |
+| Linux x86-64 package | Earlier pilot ran on Ubuntu 24.04. Verify the final native package and upgrade in a clean environment. |
+| macOS arm64 package | Native build, clean install and upgrade verification pending. |
+| Linux x86-64 CLI and GitLab images | Pinned recipes. Verify Docker builds and runtime checks and scan the exact OCI artifacts. |
+| Performance and accuracy | Initial measurements and frozen holdout scores are in the [progress record](../PROGRESS.md). Complete the release benchmarks and accuracy review on the final candidate. |
+| Release integrity and licensing | Local hashes and provisional SBOMs. Approved licensing and notice review, signed provenance, and approval to publish remain pending. |
