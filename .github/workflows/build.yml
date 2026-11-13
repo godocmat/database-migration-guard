@@ -1,0 +1,33 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  workspace:
+    name: Workspace (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, windows-2025, macos-15]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select the pinned toolchain
+        run: rustc -Vv
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Build
+        run: cargo build --locked --workspace
+      - name: Lint
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Test contracts
+        run: cargo test --locked --workspace
