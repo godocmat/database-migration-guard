@@ -358,7 +358,7 @@ DMG-06 rule implementation is integrated. PG001–PG007 and predicted relation l
 
 ### Start each assignment from a committed revision
 
-Use one fresh Codex chat in **Worktree** mode per assignment. Select the branch containing the accepted starting commit. Codex starts a managed worktree at that revision with a detached HEAD by default. Use **Create branch here** to give each task a durable branch before handoff, for example `codex/dmg-01-parser-research`. A built-in subagent reports to its parent chat. When using that form of delegation, explicitly assign a fresh worktree to each worker before it edits files. [Codex worktrees](https://learn.chatgpt.com/docs/environments/git-worktrees), [Codex subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)
+Start a fresh subagent session and Git worktree for each assignment, including follow-up reviews. Use the accepted commit containing the assignment's dependencies. Give each worktree a durable branch, for example `codex/dmg-01-parser-research`, and pass any prior work by commit. Built-in subagents report to the coordinating chat and need their worktree path assigned before editing. [Codex worktrees](https://learn.chatgpt.com/docs/environments/git-worktrees) · [Codex subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)
 
 The coordinating chat owns the local `master` integration branch and updates the backlog. Start each worker from an accepted commit that contains its dependencies and the current plan.
 
