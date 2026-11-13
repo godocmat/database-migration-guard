@@ -1,0 +1,134 @@
+{
+  "app_select_sqlstate": "42501",
+  "constraint_catalog": {
+    "enforcement_field": false,
+    "named_not_null": 0
+  },
+  "denied_optional_size_sqlstate": "42501",
+  "limit_sentinel": 2,
+  "partition_edges": [
+    {
+      "child": "events_first",
+      "detach_pending": false,
+      "parent": "events"
+    }
+  ],
+  "physical_total_bytes_before_lock": 73728,
+  "postgres_binary_sha256": "cf7974c4cbac3c08008129ee07838e2557274af7a7e4755339e19e7f47e83ad6",
+  "psql_binary_sha256": "b059f218946a987ab3d13dd58c0c2b8fadb0fa31a9328477e64d9e3f8bc1dc57",
+  "quota_default": "3",
+  "raw_fields_under_ddl_lock": {
+    "columns": {
+      "elapsed_ms": 7.52,
+      "sqlstate": "00000"
+    },
+    "constraints": {
+      "elapsed_ms": 7.86,
+      "sqlstate": "00000"
+    },
+    "indexes": {
+      "elapsed_ms": 7.09,
+      "sqlstate": "00000"
+    }
+  },
+  "read_only_sqlstate": "25006",
+  "relations": {
+    "accounts": {
+      "estimated_heap_bytes": 16384,
+      "estimated_rows": 256,
+      "is_partition": false,
+      "kind": "r",
+      "relation": "accounts",
+      "schema": "catalog_scope"
+    },
+    "events": {
+      "estimated_heap_bytes": null,
+      "estimated_rows": null,
+      "is_partition": false,
+      "kind": "p",
+      "relation": "events",
+      "schema": "catalog_scope"
+    },
+    "events_first": {
+      "estimated_heap_bytes": 0,
+      "estimated_rows": null,
+      "is_partition": true,
+      "kind": "r",
+      "relation": "events_first",
+      "schema": "catalog_scope"
+    },
+    "metadata_only": {
+      "estimated_heap_bytes": 0,
+      "estimated_rows": null,
+      "is_partition": false,
+      "kind": "r",
+      "relation": "metadata_only",
+      "schema": "catalog_public"
+    },
+    "unanalyzed": {
+      "estimated_heap_bytes": 0,
+      "estimated_rows": null,
+      "is_partition": false,
+      "kind": "r",
+      "relation": "unanalyzed",
+      "schema": "catalog_scope"
+    }
+  },
+  "scope": {
+    "catalog_empty": "visible",
+    "catalog_hidden": "denied",
+    "catalog_missing": "missing",
+    "catalog_public": "visible",
+    "catalog_scope": "visible"
+  },
+  "session": {
+    "block_size": 8192,
+    "elevated_role": false,
+    "hidden_catalog_visible": true,
+    "observed_at_valid": true,
+    "owner_create": true,
+    "owner_usage": true,
+    "read_all_stats": false,
+    "read_only": true,
+    "repeatable_read": true,
+    "schema_create": false,
+    "server_version_num": 160016,
+    "table_select": false
+  },
+  "size_lock_timeout": {
+    "elapsed_ms": 104.17,
+    "sqlstate": "55P03"
+  },
+  "size_statement_timeout": {
+    "elapsed_ms": 53.62,
+    "sqlstate": "57014"
+  },
+  "under_ddl_lock": {
+    "columns": {
+      "elapsed_ms": 108.16,
+      "sqlstate": "55P03"
+    },
+    "constraints": {
+      "elapsed_ms": 107.76,
+      "sqlstate": "55P03"
+    },
+    "indexes": {
+      "elapsed_ms": 109.42,
+      "sqlstate": "55P03"
+    },
+    "partitions": {
+      "elapsed_ms": 7.99,
+      "sqlstate": "00000"
+    },
+    "relations": {
+      "elapsed_ms": 8.04,
+      "sqlstate": "00000"
+    },
+    "scope": {
+      "elapsed_ms": 7.6,
+      "sqlstate": "00000"
+    }
+  },
+  "unvalidated_check": "CHECK ((quota > 0)) NOT VALID",
+  "valid_index": "CREATE INDEX accounts_quota_idx ON catalog_scope.accounts USING btree (quota)"
+}
