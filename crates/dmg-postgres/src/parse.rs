@@ -3,7 +3,7 @@ use std::{ops::Range, sync::Mutex};
 use dmg_core::{
     coverage::{Coverage, CoverageGap, CoverageGapKind, DiagnosticScope},
     digest::ContentDigest,
-    migration::{MigrationDirection, MigrationFile, MigrationPlan},
+    migration::{MigrationDirection, MigrationFile, MigrationPlan, TransactionWrapper},
     source::{ByteRange, RepoPath, SourceMap, SourceSpan},
     target::PostgresTarget,
 };
@@ -138,6 +138,9 @@ fn parse_file(
         };
         segment_parser.parse();
         previous_end = range.end();
+    }
+    if let TransactionWrapper::Flyway(settings) = file.execution.transaction_wrapper {
+        crate::flyway::apply_execution(settings, text, &mut parsed, &mut gaps);
     }
     let syntax_complete = gaps.is_empty();
     versions.check(target, &parsed, &mut gaps, syntax_complete);

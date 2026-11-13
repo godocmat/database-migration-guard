@@ -1,11 +1,13 @@
 //! Discover migration files and retain the source bytes used by the plan.
 
+mod flyway;
 mod git;
 mod integrity;
 mod manifest;
 mod sqlx;
 mod worktree;
 
+pub use dmg_core::migration::FlywaySettings;
 pub use git::GitRevisions;
 pub use manifest::{ManifestError, compare_integrity_manifest, reconcile_applied_manifest};
 pub use sqlx::SqlxLayout;
@@ -182,6 +184,7 @@ pub enum DiscoveryConfigError {
 pub enum Adapter {
     Plain(PlainSql),
     Sqlx(SqlxLayout),
+    Flyway(FlywaySettings),
 }
 
 #[derive(Debug, Clone)]
@@ -286,6 +289,7 @@ impl Adapter {
         match self {
             Self::Plain(_) => MigrationAdapter::Plain,
             Self::Sqlx(_) => MigrationAdapter::Sqlx,
+            Self::Flyway(_) => MigrationAdapter::Flyway,
         }
     }
 
@@ -293,6 +297,7 @@ impl Adapter {
         let plain = match self {
             Self::Plain(plain) => plain,
             Self::Sqlx(layout) => return layout.candidate(filename),
+            Self::Flyway(_) => return flyway::candidate(filename),
         };
         let Some(captures) = plain.filename_pattern.captures(filename) else {
             return Ok(None);
@@ -325,6 +330,9 @@ impl Adapter {
                     ));
                 }
                 sqlx::execution(bytes)
+            }
+            Self::Flyway(settings) => {
+                return flyway::source_layout(*settings, candidate, path, bytes);
             }
         };
         (

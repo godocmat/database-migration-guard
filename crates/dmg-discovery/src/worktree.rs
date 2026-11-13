@@ -104,7 +104,9 @@ fn collect_file(
     filename: &str,
 ) {
     let metadata = directory.symlink_metadata(filename);
-    if metadata.as_ref().is_ok_and(cap_std::fs::Metadata::is_dir) {
+    let is_directory = metadata.as_ref().is_ok_and(cap_std::fs::Metadata::is_dir);
+    let flyway = matches!(options.adapter, crate::Adapter::Flyway(_));
+    if is_directory && !flyway {
         return;
     }
     let Some(path) = RepoPath::new(format!("{root}/{filename}"))
@@ -118,6 +120,23 @@ fn collect_file(
         ));
         return;
     };
+    if is_directory {
+        crate::flyway::check_child_root(inventory, options, &path);
+        return;
+    }
+    if flyway && !metadata.as_ref().is_ok_and(cap_std::fs::Metadata::is_file) {
+        let kind = if metadata.is_err() {
+            CoverageGapKind::UnreadableInput
+        } else {
+            CoverageGapKind::InvalidPath
+        };
+        inventory.gaps.push(coverage_gap(
+            kind,
+            Some(&path),
+            "Flyway migration locations must contain readable files and ordinary directories",
+        ));
+        return;
+    }
     let Some(candidate) = record_candidate(inventory, options, &path, filename) else {
         return;
     };

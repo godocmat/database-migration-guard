@@ -353,6 +353,9 @@ fn commit(repo: &Path, message: &str) -> String {
     git(repo, &["rev-parse", "HEAD"])
 }
 
+#[path = "discovery/flyway.rs"]
+mod flyway;
+
 #[test]
 fn integrity_and_applied_manifests_classify_independent_evidence() {
     use dmg_core::migration::{AppliedStatus, IntegrityStatus};

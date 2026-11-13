@@ -177,6 +177,27 @@ impl ExecutionMode {
 pub enum TransactionWrapper {
     None,
     File,
+    /// Flyway decides its effective wrapper after classifying the file's statements.
+    Flyway(FlywaySettings),
+}
+
+/// The supported Flyway PostgreSQL transaction settings declared by the operator.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FlywaySettings {
+    pub execute_in_transaction: bool,
+    pub mixed: bool,
+    pub transactional_lock: bool,
+}
+
+impl Default for FlywaySettings {
+    fn default() -> Self {
+        Self {
+            execute_in_transaction: true,
+            mixed: false,
+            transactional_lock: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]

@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 mod expression;
+mod flyway;
 mod normalize;
 mod operation;
 mod parse;
