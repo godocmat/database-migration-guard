@@ -304,6 +304,8 @@ The backlog tracks remaining acceptance work. Implement in dependency order and 
 
 Review requirements, run relevant checks, fix failures, update documentation, and capture evidence at each milestone. Keep the backlog current and proceed with independent items when a dependency is blocked.
 
+DMG-03 is integrated. The Rust 1.100.0 workspace pins the build and versions its source, migration, policy, and report contracts. Native Windows x64 and Linux x64 passed the local build, Clippy, and six contract tests. Hosted CI and macOS arm64 are pending. [Foundation evidence](PROGRESS.md#dmg-03-workspace-foundation) · [Shared contracts](DECISIONS.md)
+
 ## 19. Risk register
 
 | Risk | Likelihood and impact | Owner | Trigger and response |
