@@ -314,6 +314,8 @@ DMG-06 rule implementation is integrated. PG001–PG007 and predicted relation l
 
 DMG-07 is integrated. The CLI implements `init`, `policy validate`, `scan`, and `check`. It accepts trusted Git and manifest inputs and writes deterministic text and JSON reports. The Windows command suite passed, and the 130 public Git checks matched 48 passing, 58 denied, and 24 incomplete outcomes. [CLI contract and configuration](docs/cli.md)
 
+DMG-08 local implementation is integrated. The Windows x64 and Ubuntu 24.04 x64 pilot packages from `c4974cd` passed checksum verification, all 130 public CLI cases on each platform, and the local GitHub gate replay. Hosted PR and fork enforcement, HTTPS artifact delivery, and clean install on a disconnected Windows VM remain pending. [GitHub workflow](docs/github-pilot.md) · [Pilot evidence](PROGRESS.md#dmg-08-local-pilot-packages)
+
 ## 19. Risk register
 
 | Risk | Likelihood and impact | Owner | Trigger and response |
