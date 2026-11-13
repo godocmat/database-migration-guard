@@ -34,6 +34,9 @@ pub fn write_rehearsal_review(
         cleanup_name(report.cleanup),
         report.elapsed_millis,
     ))?;
+    if let Some(worker) = &report.cleanup_worker {
+        out.detail(format_args!("Worker for cleanup {}", Terminal(worker)))?;
+    }
     if let Some(failure) = &report.failure {
         write_failure(&mut out, failure)?;
     }

@@ -321,6 +321,31 @@ fn reviews_simulate_output_and_preserves_the_original_observation() {
     assert!(markdown.contains("### Rehearsal binding"));
     assert!(markdown.contains("Schema delta unavailable."));
 
+    let worker = "dmg-worker-0123456789abcdef0123456789abcdef";
+    let mut cleanup: Value = serde_json::from_slice(&original).unwrap();
+    cleanup["cleanup"] = Value::String("unconfirmed".into());
+    fixture.write("legacy-cleanup.json", &cleanup.to_string());
+    let result = review("legacy-cleanup.json", "html", "legacy-cleanup.html");
+    assert_exit(&result, 0);
+    let legacy = String::from_utf8(fixture.read("legacy-cleanup.html")).unwrap();
+    assert!(legacy.contains("Outcome Incomplete · Cleanup unconfirmed"));
+    assert!(!legacy.contains("Worker for cleanup"));
+
+    cleanup["cleanup_worker"] = Value::String(worker.into());
+    fixture.write("cleanup.json", &cleanup.to_string());
+    for (format, output) in [("html", "cleanup.html"), ("markdown", "cleanup.md")] {
+        let result = review("cleanup.json", format, output);
+        assert_exit(&result, 0);
+        let rendered = String::from_utf8(fixture.read(output)).unwrap();
+        assert!(rendered.contains(&format!("Worker for cleanup {worker}")));
+    }
+
+    cleanup["cleanup"] = Value::String("verified".into());
+    fixture.write("wrong-cleanup-status.json", &cleanup.to_string());
+    cleanup["cleanup"] = Value::String("unconfirmed".into());
+    cleanup["cleanup_worker"] = Value::String("dmg-worker-0123456789abcdef0123456789abcdeG".into());
+    fixture.write("invalid-cleanup-worker.json", &cleanup.to_string());
+
     // Extend the typed producer output with bounded statement observations.
     let mut recorded: Value = serde_json::from_slice(&original).unwrap();
     let malicious_path = "migrations/<svg onload=demo>\u{202e}.sql";
@@ -384,6 +409,8 @@ fn reviews_simulate_output_and_preserves_the_original_observation() {
     for (input, format) in [
         ("plan.json", "html"),
         ("invalid.json", "html"),
+        ("wrong-cleanup-status.json", "html"),
+        ("invalid-cleanup-worker.json", "html"),
         ("rehearsal.json", "github"),
     ] {
         let result = review(input, format, "review.html");

@@ -216,17 +216,9 @@ pub(crate) fn toml_location(input: &str, error: &toml::de::Error) -> String {
 }
 
 pub(crate) fn read_input(path: &Path, limit: u64) -> Result<Vec<u8>, InputError> {
-    let metadata = path.metadata().map_err(InputError::from)?;
-    if !metadata.is_file() {
-        return Err(InputError::NotFile);
-    }
-    if metadata.len() > limit {
-        return Err(InputError::Limit);
-    }
-    let file = File::open(path).map_err(InputError::from)?;
-    if !file.metadata().map_err(InputError::from)?.is_file() {
-        return Err(InputError::NotFile);
-    }
+    check_input_metadata(&path.metadata()?, limit)?;
+    let file = open_input(path)?;
+    check_input_metadata(&file.metadata()?, limit)?;
     let mut bytes = Vec::new();
     file.take(limit + 1)
         .read_to_end(&mut bytes)
@@ -235,6 +227,34 @@ pub(crate) fn read_input(path: &Path, limit: u64) -> Result<Vec<u8>, InputError>
         return Err(InputError::Limit);
     }
     Ok(bytes)
+}
+
+fn check_input_metadata(metadata: &std::fs::Metadata, limit: u64) -> Result<(), InputError> {
+    if !metadata.is_file() {
+        return Err(InputError::NotFile);
+    }
+    if metadata.len() > limit {
+        return Err(InputError::Limit);
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn open_input(path: &Path) -> io::Result<File> {
+    use rustix::fs::{Mode, OFlags, open};
+
+    // Keep the open from waiting on a FIFO if the path changed after the metadata check.
+    Ok(open(
+        path,
+        OFlags::RDONLY | OFlags::NONBLOCK | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?
+    .into())
+}
+
+#[cfg(not(unix))]
+fn open_input(path: &Path) -> io::Result<File> {
+    File::open(path)
 }
 
 #[derive(Debug, Error)]
@@ -269,4 +289,40 @@ pub(crate) enum ConfigError {
     SearchPath,
     #[error(transparent)]
     Discovery(#[from] dmg_discovery::DiscoveryConfigError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn input_reads_only_regular_files_within_the_limit() {
+        let scratch = tempfile::tempdir().unwrap();
+        let path = scratch.path().join("input.txt");
+        fs::write(&path, b"data").unwrap();
+
+        assert_eq!(read_input(&path, 4).unwrap(), b"data");
+        assert!(matches!(read_input(&path, 3), Err(InputError::Limit)));
+        assert!(matches!(
+            read_input(scratch.path(), 4),
+            Err(InputError::NotFile)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_open_is_nonblocking_and_supports_regular_file_symlinks() {
+        use rustix::fs::{OFlags, fcntl_getfl};
+
+        let scratch = tempfile::tempdir().unwrap();
+        let path = scratch.path().join("input.txt");
+        let link = scratch.path().join("linked.txt");
+        fs::write(&path, b"data").unwrap();
+        std::os::unix::fs::symlink(&path, &link).unwrap();
+
+        let file = open_input(&link).unwrap();
+        assert!(fcntl_getfl(&file).unwrap().contains(OFlags::NONBLOCK));
+        assert_eq!(read_input(&link, 4).unwrap(), b"data");
+    }
 }

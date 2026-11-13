@@ -123,8 +123,9 @@ impl Progress {
         }
         match result {
             Ok(()) => report.cleanup = RehearsalCleanup::Verified,
-            Err(WorkerError::CleanupUnconfirmed { .. }) => {
+            Err(WorkerError::CleanupUnconfirmed { worker, .. }) => {
                 report.cleanup = RehearsalCleanup::Unconfirmed;
+                report.cleanup_worker = Some(worker);
                 report.outcome = RehearsalOutcome::Incomplete;
                 report.failure.get_or_insert_with(|| {
                     report_failure(

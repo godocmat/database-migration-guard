@@ -89,6 +89,8 @@ Statement timing is the monotonic time from group dispatch to receipt of its com
 
 Read-only catalog observations surround migration execution after the baseline and seed have loaded. The summaries include structural digests and constraint validation and enforcement states. The diff includes structural changes and its own coverage. A report can have successful execution with incomplete catalog coverage. Failed and timed-out runs preserve available observations, including known partial commits. The report records typed failure phases and SQLSTATEs without SQL, server messages, result rows or connection secrets.
 
+Unconfirmed worker cleanup makes the rehearsal incomplete. Reports can include a `cleanup_worker` name for [operator reconciliation on the same Docker daemon](research/simulation-worker.md#postgresql-connection-and-teardown).
+
 ## Verification
 
 The ignored worker integration tests use synthetic Git revisions and run against an explicitly selected isolated Docker Engine with one approved image. Supply `DMG_WORKER_TEST_DOCKER`, `DMG_WORKER_TEST_SOCKET` and `DMG_WORKER_TEST_POSTGRES` as described in the worker documentation.

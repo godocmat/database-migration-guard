@@ -119,6 +119,9 @@ pub struct RehearsalReportV1 {
     pub elapsed_millis: u64,
     pub outcome: RehearsalOutcome,
     pub cleanup: RehearsalCleanup,
+    /// Generated Docker worker name for operator reconciliation after unconfirmed cleanup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup_worker: Option<String>,
     pub failure: Option<RehearsalFailureV1>,
     pub baseline_elapsed_millis: Option<u64>,
     pub seed_elapsed_millis: Option<u64>,
@@ -139,6 +142,7 @@ impl RehearsalReportV1 {
             elapsed_millis: 0,
             outcome: RehearsalOutcome::Incomplete,
             cleanup: RehearsalCleanup::NotObserved,
+            cleanup_worker: None,
             failure: None,
             baseline_elapsed_millis: None,
             seed_elapsed_millis: None,
@@ -169,6 +173,15 @@ impl RehearsalReportV1 {
                 .failure
                 .as_ref()
                 .is_none_or(RehearsalFailureV1::is_valid)
+            || !self.cleanup_worker.as_deref().is_none_or(|worker| {
+                self.cleanup == RehearsalCleanup::Unconfirmed
+                    && worker.strip_prefix("dmg-worker-").is_some_and(|suffix| {
+                        suffix.len() == 32
+                            && suffix
+                                .bytes()
+                                .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+                    })
+            })
         {
             return Err(InvalidRehearsalEvidence);
         }
