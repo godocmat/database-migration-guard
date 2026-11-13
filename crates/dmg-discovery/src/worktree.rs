@@ -104,7 +104,9 @@ fn collect_file(
     filename: &str,
 ) {
     let metadata = directory.symlink_metadata(filename);
-    if metadata.as_ref().is_ok_and(cap_std::fs::Metadata::is_dir) {
+    if metadata.as_ref().is_ok_and(cap_std::fs::Metadata::is_dir)
+        && !options.adapter.check_goose_directory(filename.as_bytes())
+    {
         return;
     }
     let Some(path) = RepoPath::new(format!("{root}/{filename}"))

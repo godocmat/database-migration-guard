@@ -178,7 +178,7 @@ fn collect_file(
     batch: &mut Batch,
     inventory: &mut Inventory,
 ) {
-    if entry.kind == EntryKind::Tree {
+    if entry.kind == EntryKind::Tree && !options.adapter.check_goose_directory(entry.path) {
         return;
     }
     let Some(filename) = std::str::from_utf8(entry.path)

@@ -3,14 +3,14 @@ use std::{ops::Range, sync::Mutex};
 use dmg_core::{
     coverage::{Coverage, CoverageGap, CoverageGapKind, DiagnosticScope},
     digest::ContentDigest,
-    migration::{MigrationDirection, MigrationFile, MigrationPlan},
+    migration::{MigrationAdapter, MigrationDirection, MigrationFile, MigrationPlan},
     source::{ByteRange, RepoPath, SourceMap, SourceSpan},
     target::PostgresTarget,
 };
 use pg_query::protobuf::{RawStmt, Token};
 
 use crate::{
-    ParsedMigration, ParsedPlan, Statement,
+    Operation, ParsedMigration, ParsedPlan, Statement,
     normalize::{Normalizer, node},
     version::VersionContext,
 };
@@ -133,6 +133,7 @@ fn parse_file(
             base: range.start(),
             number: segment,
             sql: &text[range.as_range()],
+            goose: file.identity.adapter == MigrationAdapter::Goose,
             gaps: &mut gaps,
             statements: &mut parsed.statements,
         };
@@ -222,6 +223,7 @@ struct SegmentParser<'a, 'source> {
     base: usize,
     number: usize,
     sql: &'source str,
+    goose: bool,
     gaps: &'a mut Vec<CoverageGap>,
     statements: &'a mut Vec<Statement>,
 }
@@ -325,6 +327,14 @@ impl<'source> SegmentParser<'_, 'source> {
             previous_end = range.end;
             if matches!(raw.token(), Token::SqlComment | Token::CComment) {
                 continue;
+            }
+            if self.goose && text.contains("\r\n") {
+                self.gap(
+                    range,
+                    CoverageGapKind::UnsupportedInput,
+                    "Goose normalizes CRLF inside this SQL token before execution",
+                );
+                return None;
             }
             let control = if text == "\\" {
                 Some((
@@ -480,12 +490,20 @@ impl<'source> SegmentParser<'_, 'source> {
             base: self.base,
             gaps: self.gaps,
         };
-        let operation = normalizer.statement(
+        let mut operation = normalizer.statement(
             raw.stmt.as_deref().and_then(node),
             tokens,
             origin,
             &location,
         );
+        if self.goose && matches!(operation, Operation::Transaction(_)) {
+            self.gaps.push(span_gap(
+                location.clone(),
+                CoverageGapKind::UnresolvedTransactionMode,
+                "authored transaction commands can change Goose driver transaction state",
+            ));
+            operation = Operation::Unsupported;
+        }
         self.statements.push(Statement {
             span: location,
             segment: self.number,

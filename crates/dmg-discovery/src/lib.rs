@@ -1,6 +1,7 @@
 //! Discover migration files and retain the source bytes used by the plan.
 
 mod git;
+mod goose;
 mod integrity;
 mod manifest;
 mod sqlx;
@@ -117,6 +118,9 @@ impl DiscoveryOptions {
         }
         roots.sort();
         roots.dedup();
+        if matches!(adapter, Adapter::Goose) && roots.len() != 1 {
+            return Err(DiscoveryConfigError::GooseRootCount);
+        }
         if limits.max_entries == 0
             || limits.max_file_bytes == 0
             || limits.max_total_bytes == 0
@@ -166,6 +170,8 @@ impl Default for DiscoveryLimits {
 pub enum DiscoveryConfigError {
     #[error("expected at least one portable repository-relative migration root")]
     InvalidRoots,
+    #[error("Goose requires exactly one migration root")]
+    GooseRootCount,
     #[error("invalid migration entry or byte limits")]
     InvalidLimits,
     #[error("Git base and head must be full commit IDs of the same hash format")]
@@ -182,6 +188,7 @@ pub enum DiscoveryConfigError {
 pub enum Adapter {
     Plain(PlainSql),
     Sqlx(SqlxLayout),
+    Goose,
 }
 
 #[derive(Debug, Clone)]
@@ -282,10 +289,16 @@ impl SourceLayout {
 }
 
 impl Adapter {
+    // Goose's filename glob also returns directories with a matching suffix.
+    fn check_goose_directory(&self, name: &[u8]) -> bool {
+        matches!(self, Self::Goose) && (name.ends_with(b".sql") || name.ends_with(b".go"))
+    }
+
     fn kind(&self) -> MigrationAdapter {
         match self {
             Self::Plain(_) => MigrationAdapter::Plain,
             Self::Sqlx(_) => MigrationAdapter::Sqlx,
+            Self::Goose => MigrationAdapter::Goose,
         }
     }
 
@@ -293,6 +306,7 @@ impl Adapter {
         let plain = match self {
             Self::Plain(plain) => plain,
             Self::Sqlx(layout) => return layout.candidate(filename),
+            Self::Goose => return goose::candidate(filename),
         };
         let Some(captures) = plain.filename_pattern.captures(filename) else {
             return Ok(None);
@@ -326,6 +340,7 @@ impl Adapter {
                 }
                 sqlx::execution(bytes)
             }
+            Self::Goose => return goose::source_layouts(path, bytes),
         };
         (
             vec![SourceLayout::whole_file(
