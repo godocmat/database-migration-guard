@@ -34,3 +34,5 @@ cargo test --locked --offline -p dmg-simulate isolated_worker_lifecycle -- --ign
 ```
 
 The current implementation runs workers on Linux x86-64. The native Windows build exposes the unsupported-platform result. The [migration rehearsal](../simulation.md) uses this worker for framework-aware forward execution, before-and-after snapshots, and revision-bound evidence.
+
+See the [Linux cgroup v2 verification](simulation-cgroup-v2-verification.md) for the four-release worker matrix and the PostgreSQL 18.7 rehearsal, check, and review workflow.
