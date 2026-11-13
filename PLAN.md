@@ -308,7 +308,7 @@ DMG-03 is integrated. The Rust 1.100.0 workspace pins the build and versions its
 
 DMG-04 is integrated. The discovery library preserves source bytes and ordered inventory for plain SQL and SQLx 0.8.6. It supports exact local Git comparisons and pinned integrity and applied-history manifests. Windows and Linux passed focused tests and worktree and Git comparisons across 24 distinct development recipes. [Migration formats and verification](docs/migration-formats.md)
 
-DMG-05 is integrated. The parser normalizes the supported PostgreSQL 17–18 operations and preserves original source ranges and incomplete coverage. The Windows suite passed all twelve parser tests, including the LF and CRLF controls, target-version constraint cases, and malformed and unsupported SQL. [Supported SQL and parser limits](docs/postgresql-support.md)
+DMG-05 is integrated. The parser normalizes the supported PostgreSQL 17–18 operations and preserves original source ranges and incomplete coverage. Windows and Linux passed all twelve parser tests, including the LF and CRLF controls, target-version constraint cases, and malformed and unsupported SQL. [Supported SQL and parser limits](docs/postgresql-support.md)
 
 ## 19. Risk register
 
