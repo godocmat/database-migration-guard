@@ -60,4 +60,8 @@ python3 -B fixtures/dmg-02/lock_probe.py --pg-bin /path/to/postgresql-17.12/bin
 python3 -B fixtures/dmg-02/lock_probe.py --pg-bin /path/to/postgresql-18.7/bin
 ```
 
-Remaining runtime work includes the other rule cases listed in the handoff, broader schema-only and image-pinned matrix coverage, and the later applied-history and Guard rehearsal cases. Independent holdout selection, labeling, freeze, and competitor comparison remain pending.
+Remaining runtime work includes the other rule cases listed in the handoff, broader schema-only and image-pinned matrix coverage, and the later applied-history and Guard rehearsal cases.
+
+## Local competitor pilot
+
+The [local migration lint pilot](competitor-pilot.md) records Guard, Squawk 2.72.0, and Atlas Community v1.3.0 on seven public plain SQL cases per PostgreSQL major. It includes the exact input and tool digests, native exits and locations, and the observed Atlas replay boundary.
