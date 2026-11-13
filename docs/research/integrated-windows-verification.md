@@ -21,4 +21,6 @@ The verifier checked the manifest pin, exact executable and SBOM bytes, and SHA2
 
 A second stage used a separate Git archive extraction and target directory on the same host with the same tools and cache. Both stages produced byte-identical executables, SBOMs, manifests and SHA256SUMS. Both package manifest and SBOM checks passed.
 
+The archive line-ending fix was verified on branch revision `2d3e5e017600b7553fb3377c42633ce4d09992d9`. Two independent stages with opposing caller CRLF and LF defaults produced byte-identical packages. Both archived lockfile and toolchain hashes matched the committed LF blobs and the native Linux inputs. The rebuilt Windows executable SHA-256 is `4f318dfaf46678a716e8a66a6e03b8f833ed14b2cc3bf3946bfb01fe8e7d576d` and its manifest SHA-256 is `eb875e3be11e1504d683849ff19def662c6658c7a377c7b2937db82c95f6c619`. Manifest, CycloneDX, installed smoke, both local CI replays, and all 130 public CLI checks passed again. [Native Linux inputs](integrated-linux-verification.md#package-verification)
+
 The installation tests used isolated local profiles and temporary Git repositories with Git for Windows 2.45.1 and Python 3.11.6. Host networking stayed enabled. The package is unsigned. Clean installation on a disconnected Windows VM, hosted CI enforcement and signed release acceptance remain pending.
