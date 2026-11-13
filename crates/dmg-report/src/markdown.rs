@@ -308,8 +308,11 @@ fn code_span(line: &str) -> String {
 }
 
 fn prose(value: &str) -> String {
-    let line = bounded_line(value, MAX_TEXT_BYTES);
-    let line = line.trim();
+    escape_prose(&bounded_line(value, MAX_TEXT_BYTES))
+}
+
+pub(super) fn escape_prose(value: &str) -> String {
+    let line = value.trim();
     // GFM autolinks and GitHub references can also arise in plain text.
     if line.contains(['@', '#'])
         || line.contains("://")

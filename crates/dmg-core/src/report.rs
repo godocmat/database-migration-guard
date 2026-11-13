@@ -1,5 +1,9 @@
 //! Versioned JSON analysis report.
 
+mod diff;
+
+pub use diff::{DiffReportFormatError, DiffReportV1};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

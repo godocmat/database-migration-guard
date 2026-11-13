@@ -24,7 +24,7 @@ const MAX_TEXT_BYTES: usize = 640;
 const MAX_PATH_BYTES: usize = 240;
 const MAX_OBJECT_COMPONENT_BYTES: usize = 80;
 
-const PAGE_START: &str = r#"<!doctype html>
+pub(super) const PAGE_START: &str = r#"<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -47,6 +47,7 @@ ul { padding-inline-start: 1.25rem; }
 li + li { margin-top: .35rem; }
 details { margin-top: .55rem; padding: .6rem .8rem; border: 1px solid; border-radius: .4rem; }
 summary { cursor: pointer; }
+.evidence-detail { margin: .25rem 0 .25rem 1rem; }
 summary code { font-size: .9em; }
 details p, details ul { margin-block: .5rem; }
 @media (max-width: 32rem) { dl { display: block; } dd { margin-block-end: .45rem; } }
@@ -55,6 +56,8 @@ details p, details ul { margin-block: .5rem; }
 <body>
 <main>
 <h1>Database Migration Guard</h1>"#;
+
+pub(super) const PAGE_END: &str = "</main>\n</body>\n</html>";
 
 /// Write a bounded, standalone HTML review of a saved Guard report.
 pub fn write_html(report: &ReportV1, mut output: impl Write) -> io::Result<()> {
@@ -140,7 +143,7 @@ pub fn write_html(report: &ReportV1, mut output: impl Write) -> io::Result<()> {
     write_gaps(&mut output, report.coverage().gaps())?;
     write_findings(&mut output, report)?;
     write_locks(&mut output, report)?;
-    writeln!(output, "</main>\n</body>\n</html>")
+    writeln!(output, "{PAGE_END}")
 }
 
 fn write_reasons(out: &mut impl Write, decision: &PolicyDecision) -> io::Result<()> {
@@ -359,7 +362,7 @@ fn omitted(out: &mut impl Write, count: usize, limit: usize, label: &str) -> io:
 }
 
 // Only text nodes receive input strings. Tag, attribute, and style data are constant.
-fn text(value: &str) -> String {
+pub(super) fn text(value: &str) -> String {
     let value = bounded_line(value, MAX_TEXT_BYTES);
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {

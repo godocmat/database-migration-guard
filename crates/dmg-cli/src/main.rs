@@ -6,6 +6,7 @@ mod diff;
 mod inspection;
 mod policy;
 mod render;
+mod review;
 mod simulate;
 
 use std::{
@@ -36,7 +37,6 @@ use render::{Terminal, write_file, write_json, write_report, write_text};
 const INVALID_INPUT: u8 = 2;
 const OPERATIONAL_FAILURE: u8 = 3;
 const MAX_MANIFEST_BYTES: u64 = 8 * 1024 * 1024;
-const MAX_SAVED_REPORT_BYTES: u64 = 256 * 1024 * 1024;
 
 #[derive(Parser)]
 #[command(name = "dmg", version, about, color = clap::ColorChoice::Never)]
@@ -83,19 +83,7 @@ enum Command {
     /// Rehearse a reviewed Git revision on a disposable PostgreSQL worker.
     Simulate(simulate::SimulateArgs),
     /// Render a saved versioned JSON report for review.
-    Report {
-        /// Saved JSON report.
-        #[arg(long, value_name = "FILE")]
-        input: PathBuf,
-
-        /// Review output format.
-        #[arg(long, value_enum)]
-        format: ReviewFormat,
-
-        /// Write the review atomically to a file instead of stdout.
-        #[arg(long, value_name = "FILE")]
-        output: Option<PathBuf>,
-    },
+    Report(review::ReviewArgs),
 }
 
 #[derive(Subcommand)]
@@ -158,15 +146,6 @@ struct AnalysisArgs {
 enum ReportFormat {
     Text,
     Json,
-}
-
-#[derive(Clone, Copy, ValueEnum)]
-enum ReviewFormat {
-    Markdown,
-    Github,
-    Html,
-    Sarif,
-    Gitlab,
 }
 
 fn parse_target(value: &str) -> Result<PostgresTarget, &'static str> {
@@ -245,41 +224,8 @@ fn run(command: Command) -> Result<u8, Failure> {
         Command::Inspect(args) => inspection::run(args),
         Command::Diff(args) => diff::run(args),
         Command::Simulate(args) => simulate::run(args),
-        Command::Report {
-            input,
-            format,
-            output,
-        } => render_saved_report(&input, format, output.as_deref()),
+        Command::Report(args) => review::run(args),
     }
-}
-
-fn render_saved_report(
-    input: &Path,
-    format: ReviewFormat,
-    output: Option<&Path>,
-) -> Result<u8, Failure> {
-    let bytes = config::read_input(input, MAX_SAVED_REPORT_BYTES).map_err(|_| {
-        Failure::operational("could not read the saved report", OPERATIONAL_FAILURE)
-    })?;
-    let input = std::str::from_utf8(&bytes)
-        .map_err(|_| Failure::invalid("saved report must be UTF-8 JSON"))?;
-    let report = ReportV1::from_json(input)
-        .map_err(|_| Failure::invalid("invalid versioned report JSON"))?;
-    write_report(output, |out| match format {
-        ReviewFormat::Markdown => dmg_report::write_markdown(&report, out),
-        ReviewFormat::Github => dmg_report::write_github_annotations(&report, out),
-        ReviewFormat::Html => dmg_report::write_html(&report, out),
-        ReviewFormat::Sarif => dmg_report::write_sarif(&report, out),
-        ReviewFormat::Gitlab => dmg_report::write_gitlab_code_quality(&report, out),
-    })
-    .map_err(|error| {
-        if error.kind() == io::ErrorKind::InvalidData {
-            Failure::invalid("saved report contains an invalid review source location")
-        } else {
-            Failure::operational("could not write the review output", OPERATIONAL_FAILURE)
-        }
-    })?;
-    Ok(0)
 }
 
 fn status_line(message: &str) -> Result<u8, Failure> {

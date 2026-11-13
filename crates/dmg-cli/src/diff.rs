@@ -1,41 +1,32 @@
 use std::{
     fmt,
-    io::{self, Write},
     path::{Path, PathBuf},
 };
 
 use clap::Args;
 use dmg_core::{
-    application::{
-        ApplicationAssessmentV1, ApplicationContractV1, ContractFact, ContractStatus,
-        ContractTransition, ContractUnknown, ContractViolation, FactAssessment,
-        MAX_APPLICATION_CONTRACT_BYTES, evaluate_contract,
-    },
+    application::{ApplicationContractV1, MAX_APPLICATION_CONTRACT_BYTES, evaluate_contract},
     coverage::CoverageStatus,
-    diff::{
-        DiffError, DiffGap, DiffSide, RenameMapping, SchemaComparisonV1, SchemaDiffV1, SchemaInput,
-        ScopeState, StructuralChange, compare_schemas,
-    },
-    inspection::{InspectionEvidenceV1, InspectionGapScope},
-    risk::{DatabaseObject, ObjectKind},
-    snapshot::{QualifiedName, SchemaSnapshotV1},
+    diff::{DiffError, RenameMapping, SchemaInput, compare_schemas},
+    inspection::InspectionEvidenceV1,
+    report::DiffReportV1,
+    snapshot::SchemaSnapshotV1,
 };
 use serde::{
-    Deserialize, Deserializer, Serialize,
+    Deserialize, Deserializer,
     de::{self, IgnoredAny, MapAccess, Visitor},
 };
 
 use crate::{
     Failure, OPERATIONAL_FAILURE, ReportFormat,
     config::{InputError, read_input},
-    render::{Terminal, write_report},
+    render::write_report,
 };
 
 const MAX_SCHEMA_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_RENAME_BYTES: u64 = 1024 * 1024;
 const MAX_RENAMES: usize = 4096;
 const MAX_CONTRACTS: usize = 16;
-const TEXT_DETAILS: usize = 20;
 
 #[derive(Args)]
 pub(crate) struct DiffArgs {
@@ -72,14 +63,6 @@ pub(crate) struct DiffArgs {
     output: Option<PathBuf>,
 }
 
-#[derive(Serialize)]
-struct DiffReport {
-    #[serde(flatten)]
-    comparison: SchemaComparisonV1,
-    coverage: CoverageStatus,
-    application_contracts: Vec<ApplicationAssessmentV1>,
-}
-
 pub(crate) fn run(args: DiffArgs) -> Result<u8, Failure> {
     let contracts = load_contracts(&args.application_contracts)?;
     let expected = load_schema(&args.expected, "expected schema")?;
@@ -114,24 +97,11 @@ pub(crate) fn run(args: DiffArgs) -> Result<u8, Failure> {
             )
         })?;
 
-    let complete = comparison.expected_to_current.coverage == CoverageStatus::Complete
-        && comparison.current_to_target.coverage == CoverageStatus::Complete
-        && application_contracts.iter().all(|assessment| {
-            assessment.current.coverage == CoverageStatus::Complete
-                && assessment.target.coverage == CoverageStatus::Complete
-        });
-    let report = DiffReport {
-        comparison,
-        coverage: if complete {
-            CoverageStatus::Complete
-        } else {
-            CoverageStatus::Incomplete
-        },
-        application_contracts,
-    };
+    let report = DiffReportV1::new(comparison, application_contracts);
+    let complete = report.coverage() == CoverageStatus::Complete;
 
     write_report(args.output.as_deref(), |mut out| match args.format {
-        ReportFormat::Text => write_text(&report, out),
+        ReportFormat::Text => dmg_report::write_diff_text(&report, out),
         ReportFormat::Json => {
             serde_json::to_writer_pretty(&mut out, &report)?;
             writeln!(out)
@@ -283,302 +253,4 @@ fn parse_json<T: serde::de::DeserializeOwned>(bytes: &[u8], label: &str) -> Resu
             error.column()
         ))
     })
-}
-
-fn write_text(report: &DiffReport, mut out: impl Write) -> io::Result<()> {
-    writeln!(
-        out,
-        "Schema comparison is {}.",
-        coverage_name(report.coverage)
-    )?;
-    write_comparison(
-        "Drift (expected to current)",
-        &report.comparison.expected_to_current,
-        &mut out,
-    )?;
-    write_comparison(
-        "Proposed changes (current to target)",
-        &report.comparison.current_to_target,
-        &mut out,
-    )?;
-    for assessment in &report.application_contracts {
-        writeln!(
-            out,
-            "Application {} {} — current {}, target {}.",
-            Terminal(&assessment.application),
-            Terminal(&assessment.version),
-            status_name(assessment.current.status),
-            status_name(assessment.target.status),
-        )?;
-        if assessment.critical_target_violation {
-            writeln!(out, "  Critical target violation.")?;
-        }
-        let details = assessment.checks.iter().filter(|check| {
-            check.current != FactAssessment::Satisfied || check.target != FactAssessment::Satisfied
-        });
-        write_details(details, &mut out, |out, check| {
-            write!(out, "  {}", Qualified(&check.table))?;
-            if let Some(column) = &check.column {
-                write!(out, ".{}", Identifier(column))?;
-            }
-            let fact = match check.fact {
-                ContractFact::Table { .. } => "table",
-                ContractFact::ColumnType { .. } => "column type",
-                ContractFact::ExplicitWrite => "explicit write",
-                ContractFact::Nullability { .. } => "nullability",
-            };
-            let transition = match check.transition {
-                ContractTransition::Preserved => "preserved",
-                ContractTransition::Regression => "regression",
-                ContractTransition::PreexistingViolation => "preexisting violation",
-                ContractTransition::Resolved => "resolved",
-                ContractTransition::Indeterminate => "indeterminate",
-            };
-            writeln!(
-                out,
-                " {fact} — {transition}. Current {}, target {}.",
-                assessment_detail(&check.current),
-                assessment_detail(&check.target),
-            )
-        })?;
-    }
-    Ok(())
-}
-
-fn write_comparison(label: &str, comparison: &SchemaDiffV1, mut out: impl Write) -> io::Result<()> {
-    writeln!(
-        out,
-        "{label} — {}, {} changes, {} coverage gaps.",
-        coverage_name(comparison.coverage),
-        comparison.changes.len(),
-        comparison.gaps.len()
-    )?;
-    for schema in &comparison.schemas {
-        if (schema.before, schema.after) != (ScopeState::Visible, ScopeState::Visible) {
-            writeln!(
-                out,
-                "  Schema {} — {} to {}.",
-                Identifier(&schema.schema),
-                scope_name(schema.before),
-                scope_name(schema.after),
-            )?;
-        }
-    }
-    write_details(
-        comparison.changes.iter(),
-        &mut out,
-        |out, change| match change {
-            StructuralChange::Added { object } => {
-                writeln!(out, "  Added {}.", Object(&object.identity))
-            }
-            StructuralChange::Removed { object } => {
-                writeln!(out, "  Removed {}.", Object(&object.identity))
-            }
-            StructuralChange::Renamed { from, to } => writeln!(
-                out,
-                "  Renamed {} to {}.",
-                Object(&from.identity),
-                Object(&to.identity),
-            ),
-            StructuralChange::Modified { after, fields, .. } => {
-                writeln!(out, "  Modified {} ({fields:?}).", Object(&after.identity))
-            }
-            StructuralChange::PartitionAdded { edge } => writeln!(
-                out,
-                "  Added partition {} under {}.",
-                Qualified(&edge.child),
-                Qualified(&edge.parent)
-            ),
-            StructuralChange::PartitionRemoved { edge } => writeln!(
-                out,
-                "  Removed partition {} under {}.",
-                Qualified(&edge.child),
-                Qualified(&edge.parent)
-            ),
-            StructuralChange::PartitionModified { after, .. } => writeln!(
-                out,
-                "  Modified partition {} under {}.",
-                Qualified(&after.child),
-                Qualified(&after.parent)
-            ),
-            StructuralChange::DependencyAdded { edge } => writeln!(
-                out,
-                "  Added dependency from {} to {}.",
-                Object(&edge.dependent),
-                Object(&edge.referenced)
-            ),
-            StructuralChange::DependencyRemoved { edge } => writeln!(
-                out,
-                "  Removed dependency from {} to {}.",
-                Object(&edge.dependent),
-                Object(&edge.referenced)
-            ),
-        },
-    )?;
-    write_details(comparison.gaps.iter(), &mut out, |out, gap| match gap {
-        DiffGap::EmptyScope => writeln!(out, "  No schemas were supplied."),
-        DiffGap::SnapshotUnavailable { side } => {
-            writeln!(out, "  {} snapshot unavailable.", side_name(*side))
-        }
-        DiffGap::Inspection { side, gap } => {
-            write!(out, "  {} {:?}", side_name(*side), gap.field)?;
-            match &gap.scope {
-                InspectionGapScope::Target => (),
-                InspectionGapScope::Schema { schema } => {
-                    write!(out, " for schema {}", Identifier(schema))?
-                }
-                InspectionGapScope::Object { object } => write!(out, " for {}", Object(object))?,
-                InspectionGapScope::Migration { .. } => (),
-            }
-            writeln!(out, " — {:?}.", gap.reason)
-        }
-        DiffGap::PresenceUnconfirmed {
-            missing_from,
-            object,
-        } => writeln!(
-            out,
-            "  {} presence unconfirmed for {}.",
-            side_name(*missing_from),
-            Object(&object.identity)
-        ),
-        DiffGap::PartitionPresenceUnconfirmed { missing_from, edge } => writeln!(
-            out,
-            "  {} partition edge unconfirmed for {} under {}.",
-            side_name(*missing_from),
-            Qualified(&edge.child),
-            Qualified(&edge.parent),
-        ),
-        DiffGap::DependencyPresenceUnconfirmed { missing_from, edge } => writeln!(
-            out,
-            "  {} dependency unconfirmed from {} to {}.",
-            side_name(*missing_from),
-            Object(&edge.dependent),
-            Object(&edge.referenced),
-        ),
-        DiffGap::FieldUnavailable {
-            side,
-            object,
-            field,
-        } => writeln!(
-            out,
-            "  {} {field:?} unavailable for {}.",
-            side_name(*side),
-            Object(&object.identity)
-        ),
-    })
-}
-
-fn write_details<T, W: Write>(
-    mut items: impl Iterator<Item = T>,
-    out: &mut W,
-    mut write: impl FnMut(&mut W, T) -> io::Result<()>,
-) -> io::Result<()> {
-    for item in items.by_ref().take(TEXT_DETAILS) {
-        write(out, item)?;
-    }
-    let more = items.count();
-    if more > 0 {
-        writeln!(out, "  {more} more entries in JSON output.")?;
-    }
-    Ok(())
-}
-
-fn coverage_name(status: CoverageStatus) -> &'static str {
-    match status {
-        CoverageStatus::Complete => "complete",
-        CoverageStatus::Incomplete => "incomplete",
-    }
-}
-
-fn status_name(status: ContractStatus) -> &'static str {
-    match status {
-        ContractStatus::Satisfied => "satisfied",
-        ContractStatus::Violated => "violated",
-        ContractStatus::Unknown => "unknown",
-    }
-}
-
-fn side_name(side: DiffSide) -> &'static str {
-    match side {
-        DiffSide::Before => "Before",
-        DiffSide::After => "After",
-    }
-}
-
-fn scope_name(state: ScopeState) -> &'static str {
-    match state {
-        ScopeState::Visible => "visible",
-        ScopeState::Missing => "missing",
-        ScopeState::Denied => "denied",
-        ScopeState::Unavailable => "unavailable",
-        ScopeState::OutsideScope => "outside scope",
-    }
-}
-
-fn assessment_detail(assessment: &FactAssessment) -> &'static str {
-    match assessment {
-        FactAssessment::Satisfied => "satisfied",
-        FactAssessment::Violated { reason } => match reason {
-            ContractViolation::MissingTable => "table absent",
-            ContractViolation::MissingColumn => "column absent",
-            ContractViolation::TableKindMismatch { .. } => "table kind differs",
-            ContractViolation::ColumnTypeMismatch { .. } => "column type differs",
-            ContractViolation::MissingNotNull => "NOT NULL absent",
-            ContractViolation::DeclaredNotNull => "NOT NULL declared",
-            ContractViolation::GeneratedColumn => "generated column",
-            ContractViolation::AlwaysIdentity => "GENERATED ALWAYS identity",
-        },
-        FactAssessment::Unknown { reason } => match reason {
-            ContractUnknown::TableUnobserved { .. } => "table unobserved",
-            ContractUnknown::ColumnUnobserved => "column unobserved",
-            ContractUnknown::NotNullConstraintUnobserved => "NOT NULL constraint unobserved",
-            ContractUnknown::NotNullUnvalidated => "NOT NULL unvalidated",
-            ContractUnknown::NotNullUnenforced => "NOT NULL unenforced",
-        },
-    }
-}
-
-struct Identifier<'a>(&'a str);
-
-impl fmt::Display for Identifier<'_> {
-    fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(out, "\"{}\"", Terminal(&self.0.replace('"', "\"\"")))
-    }
-}
-
-struct Qualified<'a>(&'a QualifiedName);
-
-impl fmt::Display for Qualified<'_> {
-    fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            out,
-            "{}.{}",
-            Identifier(&self.0.schema),
-            Identifier(&self.0.name)
-        )
-    }
-}
-
-struct Object<'a>(&'a DatabaseObject);
-
-impl fmt::Display for Object<'_> {
-    fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let kind = match self.0.kind {
-            ObjectKind::Schema => "schema",
-            ObjectKind::Relation => "table",
-            ObjectKind::Column => "column",
-            ObjectKind::Index => "index",
-            ObjectKind::Constraint => "constraint",
-            ObjectKind::Type => "type",
-        };
-        write!(out, "{kind} ")?;
-        if let Some(schema) = &self.0.schema {
-            write!(out, "{}.", Identifier(schema))?;
-        }
-        write!(out, "{}", Identifier(&self.0.name))?;
-        if let Some(member) = &self.0.member {
-            write!(out, ".{}", Identifier(member))?;
-        }
-        Ok(())
-    }
 }

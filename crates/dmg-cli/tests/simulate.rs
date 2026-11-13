@@ -277,6 +277,122 @@ fn valid_plan_emits_a_typed_report_when_the_worker_is_unavailable() {
     );
 }
 
+#[test]
+fn reviews_simulate_output_and_preserves_the_original_observation() {
+    let fixture = Fixture::new(HEAD_SQL);
+    fixture.rehearsal(&format!("{REHEARSAL}{WORKER}"));
+    let result = fixture.run(&["--output", "rehearsal.json"]);
+    assert_exit(&result, 3);
+
+    let original = fixture.read("rehearsal.json");
+    let review = |input: &str, format: &str, output: &str| {
+        Command::new(env!("CARGO_BIN_EXE_dmg"))
+            .current_dir(fixture.dir.path())
+            .args([
+                "report",
+                "--kind",
+                "rehearsal",
+                "--input",
+                input,
+                "--format",
+                format,
+                "--output",
+                output,
+            ])
+            .output()
+            .unwrap()
+    };
+    let result = review("rehearsal.json", "html", "review.html");
+    assert_exit(&result, 0);
+    assert!(result.stdout.is_empty() && result.stderr.is_empty());
+    let html = String::from_utf8(fixture.read("review.html")).unwrap();
+    assert!(html.contains("Outcome Incomplete · Cleanup unobserved"));
+    assert!(html.contains("Worker provisioning"));
+    assert!(html.contains("Schema observation unavailable."));
+    assert!(html.contains("migrations/2_change.sql · skipped"));
+    assert!(html.contains("PostgreSQL pin 18.7"));
+    assert!(html.contains(&fixture.head));
+    assert!(!html.contains("/dmg-cli-fixture-absent"));
+    assert_eq!(fixture.read("rehearsal.json"), original);
+
+    let result = review("rehearsal.json", "markdown", "review.md");
+    assert_exit(&result, 0);
+    let markdown = String::from_utf8(fixture.read("review.md")).unwrap();
+    assert!(markdown.contains("### Rehearsal binding"));
+    assert!(markdown.contains("Schema delta unavailable."));
+
+    // Extend the typed producer output with bounded statement observations.
+    let mut recorded: Value = serde_json::from_slice(&original).unwrap();
+    let malicious_path = "migrations/<svg onload=demo>\u{202e}.sql";
+    let span = serde_json::json!({
+        "path": malicious_path,
+        "bytes": {"start": 0, "end": 5},
+        "start": {"line": 1, "column": 1},
+        "end": {"line": 1, "column": 6},
+    });
+    recorded["cleanup"] = Value::String("verified".into());
+    recorded["outcome"] = Value::String("failed".into());
+    recorded["failure"] = serde_json::json!({
+        "phase": "migration",
+        "reason": "database",
+        "sqlstate": "23505",
+        "path": malicious_path,
+        "span": span,
+    });
+    recorded["migrations"][0]["path"] = Value::String(malicious_path.into());
+    recorded["migrations"][0]["state"] = Value::String("failed".into());
+    let statements: Vec<_> = (0..22)
+        .map(|index| {
+            let (state, durability, timing) = match index {
+                20 => ("completed", Some("committed"), Some(2)),
+                21 => ("failed", None, None),
+                _ => ("completed", Some("rolled_back"), Some(2)),
+            };
+            serde_json::json!({
+                "span": {
+                    "path": malicious_path,
+                    "bytes": {"start": index * 5, "end": index * 5 + 5},
+                    "start": {"line": index + 1, "column": 1},
+                    "end": {"line": index + 1, "column": 6},
+                },
+                "state": state,
+                "durability": durability,
+                "elapsed_millis": timing,
+            })
+        })
+        .collect();
+    recorded["migrations"][0]["groups"] = serde_json::json!([{
+        "delivery": "single_query", "elapsed_millis": 3, "statements": statements,
+    }]);
+    fixture.write("failed.json", &recorded.to_string());
+    let result = review("failed.json", "html", "failed.html");
+    assert_exit(&result, 0);
+    let failure = String::from_utf8(fixture.read("failed.html")).unwrap();
+    assert!(failure.contains("Outcome Failed · Cleanup verified"));
+    assert!(failure.contains("SQLSTATE 23505"));
+    assert!(failure.contains("Group elapsed 3 ms · Statement elapsed 2 ms"));
+    assert!(failure.contains("1 committed · 20 rolled back · 0 unknown · 1 unobserved"));
+    assert!(failure.contains("2 more entries in JSON output."));
+    assert!(failure.contains("&lt;svg onload=demo&gt;") && !failure.contains("<svg"));
+    assert!(!failure.contains('\u{202e}'));
+
+    let plan = fixture.run(&["--plan-only", "--output", "plan.json"]);
+    assert_exit(&plan, 0);
+    let mut invalid: Value = serde_json::from_slice(&original).unwrap();
+    invalid["outcome"] = Value::String("succeeded".into());
+    fixture.write("invalid.json", &invalid.to_string());
+    for (input, format) in [
+        ("plan.json", "html"),
+        ("invalid.json", "html"),
+        ("rehearsal.json", "github"),
+    ] {
+        let result = review(input, format, "review.html");
+        assert_exit(&result, 2);
+        assert!(result.stdout.is_empty());
+        assert_eq!(fixture.read("review.html"), html.as_bytes());
+    }
+}
+
 struct Fixture {
     dir: TempDir,
     base: String,

@@ -1,6 +1,6 @@
 # Saved report formats
 
-Render a saved version 1 Guard analysis report with `dmg report`. The render step reads local JSON and returns 0 once it writes the requested review. Use the original `dmg check` exit code and JSON decision for enforcement.
+Render a saved version 1 Guard report with `dmg report`. The default kind is `analysis`. Rendering reads local JSON and returns 0 once it writes the requested review. Use the original command's exit code and recorded result for enforcement or coverage decisions.
 
 ```sh
 dmg report --input report.json --format html --output report.html
@@ -12,7 +12,20 @@ dmg report --input report.json --format github
 
 `--output` replaces the destination atomically. Omit it to write to stdout. An unsupported report version, invalid JSON, or an invalid machine review source location returns 2. An unreadable input or output failure returns 3. Keep the JSON as the complete record for every review format.
 
-## HTML
+## Schema comparison and rehearsal
+
+Choose `--kind diff` for a report saved by `dmg diff --format json` and `--kind rehearsal` for an execution report saved by `dmg simulate`.
+
+```sh
+dmg report --kind diff --input diff.json --format html --output diff.html
+dmg report --kind rehearsal --input rehearsal.json --format markdown --output rehearsal.md
+```
+
+Both kinds support HTML and Markdown. Schema comparison shows drift, proposed changes, observed coverage gaps, and application contract regressions. Rehearsal shows the recorded outcome, worker cleanup, binding digests, elapsed times, statement durability, and schema observations. The human views show up to 20 details per list, including up to 20 statement observations across the entire rehearsal. Each view points to the original JSON for omitted entries. Keep the JSON to review the complete evidence.
+
+Use an execution report for the rehearsal view. A plan-only binding or a preflight diagnostic has a different shape and is rejected with exit 2. GitHub annotations, SARIF, and GitLab Code Quality require the analysis kind. A review of an incomplete or failed observation can render successfully and preserves the recorded status in the output.
+
+## Analysis HTML
 
 Open the standalone report in a browser. It shows the saved decision and coverage, findings, lock predictions, and any recorded policy audit. Findings expand to show the explanation, impact, mitigation, and bounded evidence. The page uses local system fonts, static CSS, a restrictive content security policy, and escaped report text. It loads no resources. The review shows up to 200 findings in severity order and states how many are omitted. Coverage gaps and lock predictions each show up to 50 entries, and gate reasons, baseline matches, and approvals each show up to 30.
 

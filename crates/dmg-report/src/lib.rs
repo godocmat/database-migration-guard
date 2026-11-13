@@ -1,12 +1,17 @@
 //! Review output from a versioned Guard report.
 #![forbid(unsafe_code)]
 
+mod diff;
+mod evidence;
 mod github;
 mod gitlab;
 mod html;
 mod machine;
 mod markdown;
+mod rehearsal;
 mod sarif;
+
+use std::fmt::{self, Display, Formatter};
 
 use dmg_core::{
     coverage::{CoverageGapKind, CoverageStatus},
@@ -16,10 +21,13 @@ use dmg_core::{
     source::SourceSpan,
 };
 
+pub use diff::{write_diff_review, write_diff_text};
+pub use evidence::EvidenceFormat;
 pub use github::write_github_annotations;
 pub use gitlab::write_gitlab_code_quality;
 pub use html::write_html;
 pub use markdown::write_markdown;
+pub use rehearsal::write_rehearsal_review;
 pub use sarif::write_sarif;
 
 fn decision_name(status: Option<DecisionStatus>) -> &'static str {
@@ -167,4 +175,22 @@ fn bounded_line(value: &str, max_bytes: usize) -> String {
         line.push('…');
     }
     line
+}
+
+/// Escape control characters for a terminal or other line-oriented text review.
+pub struct Terminal<'a>(pub &'a str);
+
+impl Display for Terminal<'_> {
+    fn fmt(&self, out: &mut Formatter<'_>) -> fmt::Result {
+        for character in self.0.chars() {
+            if character.is_control()
+                || matches!(character, '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+            {
+                write!(out, "{}", character.escape_unicode())?;
+            } else {
+                write!(out, "{character}")?;
+            }
+        }
+        Ok(())
+    }
 }

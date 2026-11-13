@@ -115,7 +115,7 @@ An absent, stale, mismatched, or malformed required rehearsal gives an incomplet
 
 ## Review formats
 
-Render a saved version 1 JSON report as Markdown, GitHub Actions annotations, standalone HTML, SARIF 2.1.0, or GitLab Code Quality. Rendering returns success when the requested output is written. Use the original `dmg check` status for the gate decision. [Saved report formats](report-formats.md)
+Render a saved version 1 analysis report as Markdown, GitHub Actions annotations, standalone HTML, SARIF 2.1.0, or GitLab Code Quality. Use `--kind diff` or `--kind rehearsal` for a saved comparison or execution report in Markdown or HTML. Rendering returns success when the review is written. Use the original `dmg check` status for the gate decision. [Saved report formats](report-formats.md)
 
 ```sh
 dmg report --input report.json --format markdown --output summary.md

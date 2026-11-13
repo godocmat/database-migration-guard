@@ -4,6 +4,8 @@ use std::{
     path::Path,
 };
 
+pub(crate) use dmg_report::Terminal;
+
 use dmg_core::{
     coverage::{CoverageStatus, DiagnosticScope},
     policy::DecisionStatus,
@@ -191,23 +193,6 @@ impl Display for Object<'_> {
         write!(out, "{}", Terminal(&self.0.name))?;
         if let Some(member) = &self.0.member {
             write!(out, ".{}", Terminal(member))?;
-        }
-        Ok(())
-    }
-}
-
-pub(crate) struct Terminal<'a>(pub(crate) &'a str);
-
-impl Display for Terminal<'_> {
-    fn fmt(&self, out: &mut Formatter<'_>) -> fmt::Result {
-        for character in self.0.chars() {
-            if character.is_control()
-                || matches!(character, '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
-            {
-                write!(out, "{}", character.escape_unicode())?;
-            } else {
-                write!(out, "{character}")?;
-            }
         }
         Ok(())
     }

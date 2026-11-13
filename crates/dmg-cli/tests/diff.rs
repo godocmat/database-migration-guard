@@ -320,6 +320,112 @@ fn saves_an_incomplete_report_with_known_changes_and_unknown_contract_facts() {
 }
 
 #[test]
+fn reviews_saved_diff_without_reclassifying_coverage_or_inserting_markup() {
+    let scratch = TempDir::new().unwrap();
+    let root = scratch.path();
+    save(
+        root,
+        "expected.json",
+        snapshot(vec![table("Items", "Note", "text")]),
+    );
+    save(
+        root,
+        "current.json",
+        snapshot(vec![table("Items", "Note", "text")]),
+    );
+
+    let mut tables = vec![table("Items", "Note", "int8")];
+    tables.extend((0..21).map(|index| table(&format!("extra_{index:02}"), "id", "text")));
+    tables.push(table("<img src=x>", "id", "text"));
+    let mut partial = snapshot(tables);
+    partial["gaps"] = json!([{
+        "scope": {"kind": "target"}, "field": "relations", "reason": "truncated"
+    }]);
+    save(root, "target.json", inspection("visible", Some(partial)));
+    save(root, "app.json", contract("viewer", "Note"));
+
+    let report = diff(
+        root,
+        &[
+            "--application-contract",
+            "app.json",
+            "--format",
+            "json",
+            "--output",
+            "result.json",
+        ],
+    );
+    assert_exit(&report, 3);
+
+    let review = |kind: &str, format: &str, output: &str| {
+        Command::new(env!("CARGO_BIN_EXE_dmg"))
+            .current_dir(root)
+            .args([
+                "report",
+                "--kind",
+                kind,
+                "--input",
+                "result.json",
+                "--format",
+                format,
+                "--output",
+                output,
+            ])
+            .output()
+            .unwrap()
+    };
+    let output = review("diff", "html", "review.html");
+    assert_exit(&output, 0);
+    assert!(output.stdout.is_empty() && output.stderr.is_empty());
+    let html = fs::read_to_string(root.join("review.html")).unwrap();
+    assert!(html.contains("Content-Security-Policy"));
+    assert!(html.contains("<h3>Drift (expected to current)</h3>"));
+    assert!(html.contains("Schema comparison is incomplete."));
+    assert!(html.contains("Critical target violation."));
+    assert!(html.contains("3 more entries in JSON output."));
+    assert!(html.contains("&lt;img src=x&gt;") && !html.contains("<img"));
+    assert!(!html.contains(SECRET));
+
+    let output = review("diff", "markdown", "review.md");
+    assert_exit(&output, 0);
+    let markdown = fs::read_to_string(root.join("review.md")).unwrap();
+    assert!(markdown.contains("### Proposed changes (current to target)"));
+    assert!(markdown.contains("regression"));
+    assert!(markdown.contains(r"\<img src=x\>"));
+    assert!(!markdown.contains(SECRET));
+
+    let report = fs::read_to_string(root.join("result.json")).unwrap();
+    for (kind, format, content) in [
+        ("diff", "sarif", report.clone()),
+        ("rehearsal", "html", report.clone()),
+        (
+            "diff",
+            "html",
+            report.replace(
+                r#""application_contracts": ["#,
+                r#""application_contracts": [], "application_contracts": ["#,
+            ),
+        ),
+        (
+            "diff",
+            "html",
+            report.replacen(r#""schema_version": 1"#, r#""schema_version": 2"#, 1),
+        ),
+        ("diff", "html", {
+            let mut inconsistent: Value = serde_json::from_str(&report).unwrap();
+            inconsistent["coverage"] = json!("complete");
+            inconsistent.to_string()
+        }),
+    ] {
+        fs::write(root.join("result.json"), content).unwrap();
+        let invalid = review(kind, format, "review.html");
+        assert_exit(&invalid, 2);
+        assert!(invalid.stdout.is_empty());
+        assert_eq!(fs::read_to_string(root.join("review.html")).unwrap(), html);
+    }
+}
+
+#[test]
 fn rejects_mixed_or_duplicate_shape_fields_without_replacing_output() {
     let scratch = TempDir::new().unwrap();
     let root = scratch.path();
