@@ -1,5 +1,6 @@
 use std::{fmt, future::poll_fn, ops::AsyncFnOnce, time::Duration};
 
+use dmg_core::inspection::InspectionGapReason;
 use rustls::{
     ClientConfig, RootCertStore,
     pki_types::{CertificateDer, ServerName, pem::PemObject},
@@ -18,7 +19,7 @@ const SERVER_INFO: &str = "
     SELECT pg_catalog.current_setting('server_version_num')::pg_catalog.int4,
            pg_catalog.current_setting('block_size')::pg_catalog.int4,
            pg_catalog.current_setting('transaction_read_only') = 'on',
-           pg_catalog.current_setting('transaction_isolation') = 'repeatable read',
+           pg_catalog.current_setting('transaction_isolation') = $1,
            pg_catalog.current_schemas(true) = ARRAY['pg_catalog']::pg_catalog.name[]
 ";
 
@@ -82,13 +83,30 @@ impl InspectionTarget {
             ServerInfo,
         ) -> Result<T, TransportError>,
     ) -> Result<T, TransportError> {
-        timeout(timeouts.overall, self.run_read_only(timeouts, read))
+        self.with_read_only_at(InspectionIsolation::Catalog, timeouts, read)
             .await
-            .map_err(|_| TransportError::Deadline)?
+    }
+
+    pub(crate) async fn with_read_only_at<T>(
+        &self,
+        isolation: InspectionIsolation,
+        timeouts: InspectionTimeouts,
+        read: impl for<'tx, 'client> AsyncFnOnce(
+            &'tx mut Transaction<'client>,
+            ServerInfo,
+        ) -> Result<T, TransportError>,
+    ) -> Result<T, TransportError> {
+        timeout(
+            timeouts.overall,
+            self.run_read_only(isolation, timeouts, read),
+        )
+        .await
+        .map_err(|_| TransportError::Deadline)?
     }
 
     async fn run_read_only<T>(
         &self,
+        isolation: InspectionIsolation,
         timeouts: InspectionTimeouts,
         read: impl for<'tx, 'client> AsyncFnOnce(
             &'tx mut Transaction<'client>,
@@ -116,12 +134,12 @@ impl InspectionTarget {
         let transaction = async {
             let mut tx = client
                 .build_transaction()
-                .isolation_level(IsolationLevel::RepeatableRead)
+                .isolation_level(isolation.level())
                 .read_only(true)
                 .start()
                 .await
                 .map_err(|error| TransportError::postgres(TransportStage::Setup, &error))?;
-            let result = match server_info(&tx).await {
+            let result = match server_info(&tx, isolation).await {
                 Ok(server) => read(&mut tx, server).await,
                 Err(error) => Err(error),
             };
@@ -249,9 +267,34 @@ pub struct ServerInfo {
     pub block_size: u32,
 }
 
-async fn server_info(tx: &Transaction<'_>) -> Result<ServerInfo, TransportError> {
+#[derive(Clone, Copy)]
+pub(crate) enum InspectionIsolation {
+    Catalog,
+    History,
+}
+
+impl InspectionIsolation {
+    fn level(self) -> IsolationLevel {
+        match self {
+            Self::Catalog => IsolationLevel::RepeatableRead,
+            Self::History => IsolationLevel::ReadCommitted,
+        }
+    }
+
+    fn setting(self) -> &'static str {
+        match self {
+            Self::Catalog => "repeatable read",
+            Self::History => "read committed",
+        }
+    }
+}
+
+pub(crate) async fn server_info(
+    tx: &Transaction<'_>,
+    isolation: InspectionIsolation,
+) -> Result<ServerInfo, TransportError> {
     let row = tx
-        .query_one(SERVER_INFO, &[])
+        .query_one(SERVER_INFO, &[&isolation.setting()])
         .await
         .map_err(|error| TransportError::postgres(TransportStage::Setup, &error))?;
     let positive = |index| {
@@ -318,6 +361,21 @@ impl TransportError {
         match self {
             Self::Postgres { sqlstate, .. } => sqlstate.as_deref(),
             _ => None,
+        }
+    }
+
+    pub(crate) fn gap_reason(&self) -> InspectionGapReason {
+        use InspectionGapReason as Reason;
+
+        match self {
+            Self::Deadline => Reason::Deadline,
+            Self::InvalidSession => Reason::InvalidValue,
+            _ => match self.sqlstate() {
+                Some("28000" | "28P01" | "42501") => Reason::PermissionDenied,
+                Some("55P03") => Reason::Contention,
+                Some("57014") => Reason::Cancelled,
+                _ => Reason::QueryFailed,
+            },
         }
     }
 

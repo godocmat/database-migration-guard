@@ -108,7 +108,7 @@ impl InspectionTarget {
             })
             .await;
         if let Err(error) = result {
-            let reason = transport_reason(&error);
+            let reason = error.gap_reason();
             collection
                 .gaps
                 .push(target_gap(InspectionField::Connection, reason));
@@ -328,9 +328,10 @@ async fn isolated_query(
         .savepoint("dmg_catalog_read")
         .await
         .map_err(|error| TransportError::postgres(TransportStage::Query, &error))?;
-    let result = savepoint.query_typed(query, params).await.map_err(|error| {
-        transport_reason(&TransportError::postgres(TransportStage::Query, &error))
-    });
+    let result = savepoint
+        .query_typed(query, params)
+        .await
+        .map_err(|error| TransportError::postgres(TransportStage::Query, &error).gap_reason());
     // Rolling back even successful reads releases locks held by an optional function.
     savepoint
         .rollback()
@@ -340,21 +341,6 @@ async fn isolated_query(
         .await
         .map_err(|error| TransportError::postgres(TransportStage::Rollback, &error))?;
     Ok(result)
-}
-
-fn transport_reason(error: &TransportError) -> InspectionGapReason {
-    use InspectionGapReason as Reason;
-
-    match error {
-        TransportError::Deadline => Reason::Deadline,
-        TransportError::InvalidSession => Reason::InvalidValue,
-        _ => match error.sqlstate() {
-            Some("28000" | "28P01" | "42501") => Reason::PermissionDenied,
-            Some("55P03") => Reason::Contention,
-            Some("57014") => Reason::Cancelled,
-            _ => Reason::QueryFailed,
-        },
-    }
 }
 
 fn value<T: FromSqlOwned>(row: &Row, index: usize) -> CatalogValue<T> {
