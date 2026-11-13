@@ -74,6 +74,8 @@ pub fn write_markdown(report: &ReportV1, mut output: impl Write) -> io::Result<(
                     DecisionReasonKind::IntegrityViolation => "Integrity violation",
                     DecisionReasonKind::RequiredCoverage => "Required coverage",
                     DecisionReasonKind::RequiredEvidence => "Required evidence",
+                    DecisionReasonKind::ApprovalRequired => "Approval required",
+                    DecisionReasonKind::RehearsalFailed => "Rehearsal failed",
                 };
                 writeln!(output, "- **{kind}** · {}", prose(&reason.message))?;
             }

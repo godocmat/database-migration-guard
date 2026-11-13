@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::{
     coverage::{Coverage, CoverageGap},
     migration::MigrationPlan,
-    policy::PolicyDecision,
+    policy::{PolicyAuditV1, PolicyDecision},
     risk::{Finding, RelationLockObservation, Severity},
     schema::SchemaVersionV1,
     target::PostgresTarget,
@@ -24,6 +24,8 @@ pub struct ReportV1 {
     severity_summary: SeveritySummary,
     findings: Vec<Finding>,
     decision: Option<PolicyDecision>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    policy_audit: Option<PolicyAuditV1>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     relation_locks: Vec<RelationLockObservation>,
 }
@@ -60,6 +62,7 @@ impl ReportV1 {
             severity_summary,
             findings,
             decision,
+            policy_audit: None,
             relation_locks: Vec::new(),
         }
     }
@@ -68,6 +71,11 @@ impl ReportV1 {
         locks.sort();
         locks.dedup();
         self.relation_locks = locks;
+        self
+    }
+
+    pub fn with_policy_audit(mut self, audit: Option<PolicyAuditV1>) -> Self {
+        self.policy_audit = audit;
         self
     }
 
@@ -97,6 +105,10 @@ impl ReportV1 {
 
     pub fn decision(&self) -> Option<&PolicyDecision> {
         self.decision.as_ref()
+    }
+
+    pub fn policy_audit(&self) -> Option<&PolicyAuditV1> {
+        self.policy_audit.as_ref()
     }
 
     pub fn relation_locks(&self) -> &[RelationLockObservation] {
