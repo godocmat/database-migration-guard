@@ -38,7 +38,7 @@ The native SBOM combines the locked cargo-cyclonedx inventory with packages Carg
 
 Review imported native libraries on each platform with a native inspection tool such as dumpbin /DEPENDENTS, readelf -d, or otool -L. Record and verify the expected OS runtimes on the clean test host, including the installed Visual C++ runtime where applicable. Review registry package licenses and compile the required redistribution notices for the exact release. Include the pinned parser's upstream licenses and vendored notices and the ring native source notices. For the CLI image, generate a separate filesystem SBOM with a reviewed Syft release or equivalent and retain the application SBOM for the executable. Scan the final locked Cargo graph and the image packages with reviewed advisory sources and record their database revisions. [Parser notices](research/postgresql-parser.md#build-and-redistribution-evidence) · [Ring notices](https://docs.rs/crate/ring/0.17.14/source/LICENSE) · [Syft documentation](https://oss.anchore.com/docs/overview/sbom/)
 
-The project license and final redistribution notices are pending an owner decision. Resolve both before distributing the release. [Release acceptance](../PLAN.md#20-definition-of-done)
+The native package notice review records the locked crate archives, included upstream texts, and outstanding runtime and image scope. The project license and final redistribution notices are pending an owner decision. Resolve both before distributing the release. [Third-party notice review](research/release-notices-review.md) · [Release acceptance](../PLAN.md#20-definition-of-done)
 
 ## Verify and smoke test an installation
 
@@ -127,4 +127,4 @@ Record the exact source revision, artifact SHA-256 or OCI digest, environment, a
 | macOS arm64 package | Native build, clean install and upgrade verification pending. |
 | Linux x86-64 CLI and GitLab images | Pinned recipes. Verify Docker builds and runtime checks and scan the exact OCI artifacts. |
 | Performance and accuracy | The cross-built Linux `af21401` executable met the 2-vCPU, 8-GiB planning budgets. The native Windows `af21401` holdout matched 100 of 100 gate outcomes and 56 of 64 exact findings. Review the remaining discrepancies for release. [Benchmark evidence](../fixtures/dmg-15/README.md) · [Holdout and boundary results](../PROGRESS.md#dmg-15-frozen-holdout-rescore) |
-| Release integrity and licensing | Local hashes and provisional SBOMs. Approved licensing and notice review, signed provenance, and approval to publish remain pending. |
+| Release integrity and licensing | Native package hashes, validated SBOMs, and draft third-party notices are available. Project licensing, final notice approval, signed provenance, and approval to publish remain pending. [Third-party notice review](research/release-notices-review.md) |
