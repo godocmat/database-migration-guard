@@ -40,12 +40,8 @@ impl SqlxLayout {
             return Err("SQLx migration filename disagrees with the configured layout");
         }
         Ok(Some(Candidate {
-            identity: MigrationIdentity {
-                adapter: MigrationAdapter::Sqlx,
-                version,
-            },
+            identity: MigrationIdentity::numeric(MigrationAdapter::Sqlx, version),
             direction,
-            execution: ExecutionMode::SQLX_TRANSACTION,
         }))
     }
 }

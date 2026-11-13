@@ -78,7 +78,7 @@ fn plain_inventory_preserves_bytes_and_numeric_order() {
     assert_eq!(
         files
             .iter()
-            .map(|file| file.identity.version)
+            .map(|file| file.identity.version.as_numeric().unwrap())
             .collect::<Vec<_>>(),
         [1, 2, 10]
     );

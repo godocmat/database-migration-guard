@@ -96,8 +96,15 @@ pub fn write_markdown(report: &ReportV1, mut output: impl Write) -> io::Result<(
                     let adapter = match identity.adapter {
                         MigrationAdapter::Plain => "plain SQL",
                         MigrationAdapter::Sqlx => "SQLx",
+                        MigrationAdapter::Flyway => "Flyway",
+                        MigrationAdapter::Goose => "Goose",
+                        MigrationAdapter::Supabase => "Supabase",
                     };
-                    format!("{adapter} migration {}", identity.version)
+                    let version = match identity.version.as_numeric() {
+                        Some(version) => version.to_string(),
+                        None => literal(&identity.version.to_string(), MAX_IDENTIFIER_BYTES),
+                    };
+                    format!("{adapter} migration {version}")
                 }
                 DiagnosticScope::Path { path } => literal(path.as_str(), MAX_IDENTIFIER_BYTES),
                 DiagnosticScope::Span { span } => location(span),

@@ -150,7 +150,11 @@ impl ExpectedFile {
 
     fn verify(&self, actual: &MigrationFile, id: &str) {
         assert_eq!(actual.path, self.path, "{id}");
-        assert_eq!(actual.identity.version, self.version, "{id}");
+        assert_eq!(
+            actual.identity.version.as_numeric(),
+            Some(self.version),
+            "{id}"
+        );
         assert_eq!(actual.direction, self.direction(), "{id}");
         let expected_mode = match self.mode.as_str() {
             "psql-file-transaction" => ExecutionMode::PSQL_FILE_TRANSACTION,
@@ -291,7 +295,7 @@ impl Fixture {
                 statuses
                     .get_mut(status)
                     .unwrap()
-                    .insert(row.identity.version);
+                    .insert(row.identity.version.as_numeric().unwrap());
             }
             statuses
                 .into_iter()

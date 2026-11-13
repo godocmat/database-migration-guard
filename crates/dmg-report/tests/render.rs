@@ -22,7 +22,7 @@ fn path(value: &str) -> RepoPath {
 fn identity(version: i64) -> MigrationIdentity {
     MigrationIdentity {
         adapter: MigrationAdapter::Plain,
-        version,
+        version: version.into(),
     }
 }
 

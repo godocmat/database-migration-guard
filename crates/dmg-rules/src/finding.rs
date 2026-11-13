@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 
 use dmg_core::{
     digest::ContentDigest,
-    migration::MigrationAdapter,
     risk::{
         Confidence, DatabaseObject, EvidenceKind, Finding, FindingEvidence, ObjectKind, RuleId,
         Severity,
@@ -128,10 +127,7 @@ fn fingerprint(
         bytes.extend_from_slice(value.as_bytes());
     };
     field(rule.code());
-    field(match migration.identity.adapter {
-        MigrationAdapter::Plain => "plain",
-        MigrationAdapter::Sqlx => "sqlx",
-    });
+    field(migration.identity.adapter.as_str());
     field(&migration.identity.version.to_string());
     field(span.path.as_str());
     field(&span.bytes.start().to_string());

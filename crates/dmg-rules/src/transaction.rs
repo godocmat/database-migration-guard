@@ -13,6 +13,7 @@ pub(crate) enum TransactionContext {
     Runner,
     Explicit,
     ImplicitBatch,
+    ExtendedBatch,
     Unknown,
 }
 
@@ -22,7 +23,10 @@ impl TransactionContext {
     }
 
     pub(crate) fn shares_transaction(self) -> bool {
-        matches!(self, Self::Runner | Self::Explicit | Self::ImplicitBatch)
+        matches!(
+            self,
+            Self::Runner | Self::Explicit | Self::ImplicitBatch | Self::ExtendedBatch
+        )
     }
 }
 
@@ -88,10 +92,11 @@ fn timeline(
         state.start(TransactionContext::Runner);
     }
 
-    let single_query = migration.execution.statement_delivery == StatementDelivery::SingleQuery;
+    let delivery = migration.execution.statement_delivery;
     let uncertain_at = first_missing_statement(migration);
-    if uncertain_connection || single_query && uncertain_at.is_some() {
-        // A missing statement also makes simple-query batch size uncertain.
+    if uncertain_connection || delivery != StatementDelivery::PerStatement && uncertain_at.is_some()
+    {
+        // Missing source may change a batch's boundaries and statement count.
         state.invalidate();
     }
     let mut steps = Vec::with_capacity(migration.statements.len());
@@ -100,7 +105,13 @@ fn timeline(
         .statements
         .chunk_by(|left, right| left.segment == right.segment)
     {
-        let implicit = single_query && segment.len() > 1;
+        let implicit = match delivery {
+            StatementDelivery::SingleQuery if segment.len() > 1 => {
+                Some(TransactionContext::ImplicitBatch)
+            }
+            StatementDelivery::ExtendedBatch => Some(TransactionContext::ExtendedBatch),
+            StatementDelivery::PerStatement | StatementDelivery::SingleQuery => None,
+        };
         for statement in segment {
             if uncertain_at.is_some_and(|start| start <= statement.span.bytes.start()) {
                 state.invalidate();
@@ -108,8 +119,10 @@ fn timeline(
 
             // The simple Query loop starts a new implicit block when necessary before
             // every statement, including after an explicit COMMIT or ROLLBACK.
-            if implicit && state.context == TransactionContext::Standalone {
-                state.start(TransactionContext::ImplicitBatch);
+            if let Some(context) = implicit
+                && state.context == TransactionContext::Standalone
+            {
+                state.start(context);
             }
             if state.context == TransactionContext::Unknown
                 && !state.stopped
@@ -123,8 +136,11 @@ fn timeline(
             steps.push(state.statement(statement, steps.len()));
         }
 
-        if state.context == TransactionContext::ImplicitBatch {
-            // The end of a simple Query commits its still-open implicit block.
+        if matches!(
+            state.context,
+            TransactionContext::ImplicitBatch | TransactionContext::ExtendedBatch
+        ) {
+            // The end of a Query or batch commits its still-open implicit block.
             let last = steps.last_mut().expect("a segment contains a statement");
             last.effect = TransactionEffect::Commit;
             state.close();
@@ -151,9 +167,9 @@ fn timeline(
             TransactionEffect::Invalidate
         }
         TransactionContext::Unknown => TransactionEffect::Invalidate,
-        TransactionContext::Standalone | TransactionContext::ImplicitBatch => {
-            TransactionEffect::None
-        }
+        TransactionContext::Standalone
+        | TransactionContext::ImplicitBatch
+        | TransactionContext::ExtendedBatch => TransactionEffect::None,
     };
     let leaves_uncertainty = matches!(
         state.context,
@@ -206,7 +222,10 @@ impl<'a> BlockState<'a> {
                 starts_block = true;
                 Ok(TransactionEffect::None)
             }
-            (Operation::Transaction(Transaction::Begin), TransactionContext::ImplicitBatch) => {
+            (
+                Operation::Transaction(Transaction::Begin),
+                TransactionContext::ImplicitBatch | TransactionContext::ExtendedBatch,
+            ) => {
                 // BEGIN promotes the current implicit block, retaining its work and locks.
                 self.context = TransactionContext::Explicit;
                 Ok(TransactionEffect::None)

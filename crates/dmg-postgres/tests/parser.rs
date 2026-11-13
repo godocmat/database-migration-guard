@@ -30,7 +30,7 @@ fn file(version: i64, path: &str, input: &[u8]) -> MigrationFile {
     MigrationFile {
         identity: MigrationIdentity {
             adapter: MigrationAdapter::Plain,
-            version,
+            version: version.into(),
         },
         path: RepoPath::new(path).unwrap(),
         direction: MigrationDirection::Forward,

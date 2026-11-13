@@ -91,7 +91,7 @@ pub(crate) fn write_text(report: &ReportV1, mut out: impl Write) -> io::Result<(
         match &gap.scope {
             DiagnosticScope::Repository => write!(out, "repository")?,
             DiagnosticScope::Migration { identity } => {
-                write!(out, "migration {}", identity.version)?
+                write!(out, "migration {}", Terminal(&identity.version.to_string()))?
             }
             DiagnosticScope::Path { path } => write!(out, "{}", Terminal(path.as_str()))?,
             DiagnosticScope::Span { span } => write!(out, "{}", Location(span))?,

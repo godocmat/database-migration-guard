@@ -223,7 +223,7 @@ fn collect_file(
         return;
     }
     match batch.read_blob(entry.oid, budget_for_file(inventory, options)) {
-        Ok(Some(bytes)) => inventory.add(candidate, path, bytes),
+        Ok(Some(bytes)) => inventory.add(&options.adapter, candidate, path, bytes),
         Ok(None) => inventory.gaps.push(coverage_gap(
             CoverageGapKind::InputLimitExceeded,
             Some(&path),

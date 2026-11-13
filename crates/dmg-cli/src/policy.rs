@@ -108,7 +108,12 @@ impl ValidatedPolicy {
         if let Some(comparison) = &plan.integrity {
             for change in &comparison.changes {
                 let status = match change.status {
-                    IntegrityStatus::Modified if self.policy.integrity.deny_modified => "modified",
+                    IntegrityStatus::Modified
+                        if self.policy.integrity.deny_modified
+                            && !change.identity.is_repeatable() =>
+                    {
+                        "modified"
+                    }
                     IntegrityStatus::Missing if self.policy.integrity.deny_missing => "missing",
                     _ => continue,
                 };
