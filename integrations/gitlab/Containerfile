@@ -1,12 +1,30 @@
-# Docker Official Ubuntu Noble SCM base, linux/amd64 manifest.
-FROM docker.io/library/buildpack-deps:noble-scm@sha256:3499ba66ea3258e86ebedc69188f58882e2738357dea0e1583da9838d61e15bd
+# Chainguard Wolfi base, Linux x86-64 manifest.
+FROM cgr.dev/chainguard/wolfi-base@sha256:7b01dd2f4364d52e4c9ceaf149eb61e5510a41a3b178f230ef785e9bf26c6c4b
+
+# SHA256SUMS joins the CLI and GitLab-only locks under integrations/wolfi/.
+RUN --network=none --mount=type=bind,source=runtime-packages,target=/tmp/wolfi-apks \
+    cd /tmp/wolfi-apks/x86_64 \
+    && printf '%s  SHA256SUMS\n' f708658277015471c6f1806ecd78cc9973567dd4b725fc1c4fc6ece35495053f | sha256sum -c - \
+    && sha256sum -c SHA256SUMS \
+    && packages="$(sed -nE 's/^[0-9a-f]{64}  (.+)-([0-9][0-9A-Za-z._+]*-r[0-9]+)\.apk$/\1=\2/p' SHA256SUMS)" \
+    && test -n "$packages" \
+    && apk add --no-network --no-cache --repositories-file /dev/null --repository /tmp/wolfi-apks $packages
+
 ARG DMG_BINARY_SHA256
-RUN install -d -m 0755 /opt/dmg
+RUN install -d -m 0755 /opt/dmg /usr/local/bin
 COPY --chmod=0444 integrations/gitlab/gate.py /opt/dmg/gate.py
 COPY --chmod=0555 dmg /opt/dmg/dmg
-RUN printf '%s  /opt/dmg/dmg\n' "$DMG_BINARY_SHA256" | sha256sum --check --strict - \
+RUN case "$DMG_BINARY_SHA256" in *[!0-9a-f]*) exit 1;; esac \
+    && test "${#DMG_BINARY_SHA256}" -eq 64 \
+    && printf '%s  /opt/dmg/dmg\n' "$DMG_BINARY_SHA256" | sha256sum -c - \
     && ln -s /usr/bin/python3 /usr/local/bin/python3 \
     && /usr/local/bin/python3 --version \
     && /usr/local/bin/python3 -I -c "import tomllib" \
+    && /bin/bash --version \
+    && command -v grep >/dev/null \
     && git --version \
+    && test -x "$(git --exec-path)/git-remote-https" \
+    && test -s "$SSL_CERT_FILE" \
     && /opt/dmg/dmg --version
+
+CMD ["/bin/bash"]

@@ -1,14 +1,27 @@
-FROM docker.io/library/buildpack-deps:noble-scm@sha256:3499ba66ea3258e86ebedc69188f58882e2738357dea0e1583da9838d61e15bd
+# Chainguard Wolfi base, Linux x86-64 manifest.
+FROM cgr.dev/chainguard/wolfi-base@sha256:7b01dd2f4364d52e4c9ceaf149eb61e5510a41a3b178f230ef785e9bf26c6c4b
+
+# SHA256SUMS is the staged copy of integrations/wolfi/cli.sha256.
+RUN --network=none --mount=type=bind,source=runtime-packages,target=/tmp/wolfi-apks \
+    cd /tmp/wolfi-apks/x86_64 \
+    && printf '%s  SHA256SUMS\n' c367f0c06a49115428fc7fe46349346181e6b1bdeb752bda1a2a99b7e974edee | sha256sum -c - \
+    && sha256sum -c SHA256SUMS \
+    && packages="$(sed -nE 's/^[0-9a-f]{64}  (.+)-([0-9][0-9A-Za-z._+]*-r[0-9]+)\.apk$/\1=\2/p' SHA256SUMS)" \
+    && test -n "$packages" \
+    && apk add --no-network --no-cache --repositories-file /dev/null --repository /tmp/wolfi-apks $packages
 
 ARG DMG_BINARY_SHA256
 ARG DMG_SOURCE_COMMIT
 LABEL org.opencontainers.image.revision=$DMG_SOURCE_COMMIT
 
 COPY --chmod=0555 dmg /usr/local/bin/dmg
-RUN printf '%s\n' "$DMG_BINARY_SHA256" | grep -Ex '[0-9a-f]{64}' >/dev/null \
-    && printf '%s\n' "$DMG_SOURCE_COMMIT" | grep -Ex '[0-9a-f]{40}|[0-9a-f]{64}' >/dev/null \
-    && printf '%s  /usr/local/bin/dmg\n' "$DMG_BINARY_SHA256" | sha256sum --check --strict - \
+RUN case "$DMG_BINARY_SHA256$DMG_SOURCE_COMMIT" in *[!0-9a-f]*) exit 1;; esac \
+    && test "${#DMG_BINARY_SHA256}" -eq 64 \
+    && { test "${#DMG_SOURCE_COMMIT}" -eq 40 || test "${#DMG_SOURCE_COMMIT}" -eq 64; } \
+    && printf '%s  /usr/local/bin/dmg\n' "$DMG_BINARY_SHA256" | sha256sum -c - \
     && git --version \
+    && test -x "$(git --exec-path)/git-remote-https" \
+    && test -s "$SSL_CERT_FILE" \
     && /usr/local/bin/dmg --version
 
 ENV HOME=/tmp
