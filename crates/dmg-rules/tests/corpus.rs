@@ -17,7 +17,7 @@ use dmg_discovery::{
     PlainTransaction, SqlxLayout, VersionOrder, discover_git,
 };
 use dmg_postgres::{ParsedPlan, parse_plan};
-use dmg_rules::{Analysis, RuleOptions, analyze};
+use dmg_rules::{Analysis, RelationLock, RuleOptions, analyze};
 use serde::Deserialize;
 
 #[test]
@@ -69,7 +69,7 @@ fn analyze_development_corpus() {
         });
         let analysis = analyze(&plan, metadata.target_major, &RuleOptions::default());
 
-        for error in metadata.verify(&discovery, &plan, &analysis) {
+        for error in metadata.verify(id, &discovery, &plan, &analysis) {
             failures.push(format!("{id}: {error}"));
         }
         count += 1;
@@ -177,7 +177,13 @@ impl Fixture {
         .unwrap()
     }
 
-    fn verify(&self, discovery: &Discovery, plan: &ParsedPlan, analysis: &Analysis) -> Vec<String> {
+    fn verify(
+        &self,
+        id: &str,
+        discovery: &Discovery,
+        plan: &ParsedPlan,
+        analysis: &Analysis,
+    ) -> Vec<String> {
         let mut failures = Vec::new();
         if analysis.coverage.status() != self.expected.coverage {
             failures.push(format!(
@@ -241,6 +247,25 @@ impl Fixture {
                 .any(|finding| finding.rule_id.to_string() == *absent)
             {
                 failures.push(format!("unexpected finding {absent}"));
+            }
+        }
+        let expected_locks: &[(&str, RelationLock)] = match id.split('/').next().unwrap() {
+            "R03a" | "R03b" | "R04a" | "R04b" => &[("app.accounts", RelationLock::AccessExclusive)],
+            "R04c" => &[("app.accounts", RelationLock::ShareUpdateExclusive)],
+            "R05" => &[("app.accounts", RelationLock::Share)],
+            "V02" if self.target_major == PostgresTarget::V18 => &[
+                ("app.accounts", RelationLock::ShareRowExclusive),
+                ("app.events", RelationLock::ShareRowExclusive),
+            ],
+            _ => &[],
+        };
+        for (object, mode) in expected_locks {
+            if !analysis
+                .locks
+                .iter()
+                .any(|lock| lock.mode == *mode && object_name(&lock.object) == *object)
+            {
+                failures.push(format!("missing predicted {mode:?} lock for {object}"));
             }
         }
         for expected in &self.expected.diagnostics {
