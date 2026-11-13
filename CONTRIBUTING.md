@@ -8,7 +8,7 @@ The pinned PostgreSQL parser builds its bundled C source with a native compiler.
 
 | Build host | Native prerequisites and libclang |
 | --- | --- |
-| Ubuntu 24.04 x64 | GCC and `libclang-18-dev`. Set `LIBCLANG_PATH=/usr/lib/llvm-18/lib`. |
+| Ubuntu 24.04 x64 | GCC, `clang-18`, and `libclang-18-dev`. Set `LIBCLANG_PATH=/usr/lib/llvm-18/lib` and `CLANG_PATH=/usr/bin/clang-18` so bindgen can find the library and Clang's resource headers. |
 | Windows x64 | x64 MSVC build tools, Windows SDK, and x64 LLVM. With the default LLVM location, set `$env:LIBCLANG_PATH = "$env:ProgramFiles/LLVM/bin"` in PowerShell. |
 | macOS arm64 | Xcode Command Line Tools and arm64 Homebrew LLVM 18. Set `LIBCLANG_PATH="$(brew --prefix llvm@18)/lib"`. |
 

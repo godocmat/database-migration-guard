@@ -11,7 +11,8 @@ Fetch the locked Cargo dependencies before the offline build. Run from the stagi
 ~~~sh
 TARGET=x86_64-unknown-linux-gnu
 LIBCLANG_PATH=/usr/lib/llvm-18/lib
-export LIBCLANG_PATH
+CLANG_PATH=/usr/bin/clang-18
+export LIBCLANG_PATH CLANG_PATH
 cargo fetch --locked --target "$TARGET" --manifest-path "$BUILD_SOURCE/Cargo.toml"
 python3 -B scripts/stage-release.py stage \
   --source "$BUILD_SOURCE" --expected-commit "$REVIEWED_COMMIT" --target "$TARGET" \
