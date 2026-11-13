@@ -95,7 +95,7 @@ impl<'a> Inventory<'a> {
         }
     }
 
-    pub(super) fn source(&self) -> Result<DiffSource, DiffError> {
+    pub(crate) fn source(&self) -> Result<DiffSource, serde_json::Error> {
         Ok(DiffSource {
             structural_digest: self
                 .input
@@ -139,16 +139,39 @@ impl<'a> Inventory<'a> {
     }
 
     pub(super) fn schema_is_missing(&self, schema: &str) -> bool {
-        self.input.scope_state(schema) == ScopeState::Missing
+        self.scope_state(schema) == ScopeState::Missing
             && !self.gaps.has_broad(InspectionField::Connection, schema)
             && !self.gaps.has_broad(InspectionField::Scope, schema)
     }
 
+    pub(crate) fn scope_state(&self, schema: &str) -> ScopeState {
+        self.input.scope_state(schema)
+    }
+
+    pub(crate) fn table(&self, table: &QualifiedName) -> Option<&'a TableSnapshot> {
+        self.input.snapshot()?.table(table)
+    }
+
+    pub(crate) fn column(&self, table: &QualifiedName, name: &str) -> Option<&'a ColumnSnapshot> {
+        match self
+            .objects
+            .get(&member_id(ObjectKind::Column, table, name))
+        {
+            Some(Record::Column(_, column)) => Some(column),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn constraint_columns_observed(&self, table: &QualifiedName, name: &str) -> bool {
+        let id = member_id(ObjectKind::Constraint, table, name);
+        // Truncation can omit other rows. An object-level gap can qualify this row.
+        !self
+            .gaps
+            .has_object(InspectionField::Constraints, &id, Some(table))
+    }
+
     pub(super) fn contains_table(&self, table: &QualifiedName) -> bool {
-        self.input
-            .snapshot()
-            .and_then(|snapshot| snapshot.table(table))
-            .is_some()
+        self.table(table).is_some()
     }
 
     fn knows_absence(&self, id: &DatabaseObject, owner: Option<&QualifiedName>) -> bool {
@@ -287,7 +310,7 @@ impl<'a> Inventory<'a> {
 
     fn can_read_schema(&self, schema: &str) -> bool {
         self.input.snapshot().is_some()
-            && self.input.scope_state(schema) == ScopeState::Visible
+            && self.scope_state(schema) == ScopeState::Visible
             && !self.gaps.has_broad(InspectionField::Connection, schema)
             && !self.gaps.has_broad(InspectionField::Scope, schema)
     }
