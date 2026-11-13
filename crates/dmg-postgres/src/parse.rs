@@ -3,7 +3,9 @@ use std::{ops::Range, sync::Mutex};
 use dmg_core::{
     coverage::{Coverage, CoverageGap, CoverageGapKind, DiagnosticScope},
     digest::ContentDigest,
-    migration::{MigrationDirection, MigrationFile, MigrationPlan},
+    migration::{
+        MigrationAdapter, MigrationDirection, MigrationFile, MigrationPlan, StatementDelivery,
+    },
     source::{ByteRange, RepoPath, SourceMap, SourceSpan},
     target::PostgresTarget,
 };
@@ -132,12 +134,16 @@ fn parse_file(
             map: &map,
             base: range.start(),
             number: segment,
+            delivery: file.execution.statement_delivery,
             sql: &text[range.as_range()],
             gaps: &mut gaps,
             statements: &mut parsed.statements,
         };
         segment_parser.parse();
         previous_end = range.end();
+    }
+    if file.identity.adapter == MigrationAdapter::Supabase {
+        crate::supabase::resolve_execution(&mut parsed, text, &mut gaps);
     }
     let syntax_complete = gaps.is_empty();
     versions.check(target, &parsed, &mut gaps, syntax_complete);
@@ -221,6 +227,7 @@ struct SegmentParser<'a, 'source> {
     map: &'a SourceMap<'source>,
     base: usize,
     number: usize,
+    delivery: StatementDelivery,
     sql: &'source str,
     gaps: &'a mut Vec<CoverageGap>,
     statements: &'a mut Vec<Statement>,
@@ -489,6 +496,7 @@ impl<'source> SegmentParser<'_, 'source> {
         self.statements.push(Statement {
             span: location,
             segment: self.number,
+            delivery: self.delivery,
             operation,
         });
     }

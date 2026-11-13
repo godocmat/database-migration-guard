@@ -4,6 +4,7 @@ mod git;
 mod integrity;
 mod manifest;
 mod sqlx;
+mod supabase;
 mod worktree;
 
 pub use git::GitRevisions;
@@ -117,6 +118,9 @@ impl DiscoveryOptions {
         }
         roots.sort();
         roots.dedup();
+        if matches!(adapter, Adapter::Supabase) && roots.len() != 1 {
+            return Err(DiscoveryConfigError::SupabaseRootCount);
+        }
         if limits.max_entries == 0
             || limits.max_file_bytes == 0
             || limits.max_total_bytes == 0
@@ -164,6 +168,8 @@ impl Default for DiscoveryLimits {
 
 #[derive(Debug, Error)]
 pub enum DiscoveryConfigError {
+    #[error("Supabase discovery requires exactly one migration root")]
+    SupabaseRootCount,
     #[error("expected at least one portable repository-relative migration root")]
     InvalidRoots,
     #[error("invalid migration entry or byte limits")]
@@ -182,6 +188,7 @@ pub enum DiscoveryConfigError {
 pub enum Adapter {
     Plain(PlainSql),
     Sqlx(SqlxLayout),
+    Supabase,
 }
 
 #[derive(Debug, Clone)]
@@ -286,6 +293,7 @@ impl Adapter {
         match self {
             Self::Plain(_) => MigrationAdapter::Plain,
             Self::Sqlx(_) => MigrationAdapter::Sqlx,
+            Self::Supabase => MigrationAdapter::Supabase,
         }
     }
 
@@ -293,6 +301,7 @@ impl Adapter {
         let plain = match self {
             Self::Plain(plain) => plain,
             Self::Sqlx(layout) => return layout.candidate(filename),
+            Self::Supabase => return supabase::candidate(filename),
         };
         let Some(captures) = plain.filename_pattern.captures(filename) else {
             return Ok(None);
@@ -316,6 +325,7 @@ impl Adapter {
         let mut gap = None;
         let execution = match self {
             Self::Plain(plain) => plain.transaction.execution(),
+            Self::Supabase => return supabase::source_layouts(path, bytes),
             Self::Sqlx(_) => {
                 if std::str::from_utf8(bytes).is_err() {
                     gap = Some(coverage_gap(
