@@ -1,4 +1,5 @@
 //! Goose v3.30.1 SQL file discovery and query grouping.
+
 use dmg_core::{
     coverage::{CoverageGap, CoverageGapKind, DiagnosticScope},
     migration::{
@@ -258,6 +259,7 @@ impl Script {
                 if let Some(query) = self.query {
                     return Err(Issue::unsupported(query, UNFINISHED));
                 }
+                self.buffering = false;
                 self.direction = Some(MigrationDirection::Down);
             }
             Annotation::Down => {
@@ -316,7 +318,6 @@ impl Script {
         if !self.buffering && (line.text.trim_start().starts_with("--") || line.text.is_empty()) {
             return Ok(());
         }
-        self.buffering = true;
         if self.direction.is_none() {
             return if line.text.trim().is_empty() {
                 Ok(())
@@ -324,6 +325,7 @@ impl Script {
                 Err(Issue::unsupported(line.range(), MISSING_UP))
             };
         }
+        self.buffering = true;
 
         // Leading and trailing Unicode whitespace is trimmed by the native parser.
         // Keep interior newlines in the original range for PostgreSQL source mapping.

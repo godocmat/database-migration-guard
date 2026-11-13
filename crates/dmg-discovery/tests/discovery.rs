@@ -234,7 +234,7 @@ fn goose_tracks_shared_directional_ranges_and_native_order() {
     let grouped = "SELECT 2;\r\nSELECT 3";
     let down = "SELECT 4;";
     let sql = format!(
-        "-- heading\r\n-- +goose UP\r\n\r\n  {forward}\r\n-- +goose StatementBegin\r\n{grouped}\r\n-- +goose StatementEnd\r\n-- +goose Down\r\n-- +goose no transaction\r\n{down}\r\n",
+        "  \r\n-- heading\r\n-- +goose UP\r\n\r\n  {forward}\r\n-- +goose StatementBegin\r\n{grouped}\r\n-- +goose StatementEnd\r\n  \r\n-- +goose Down\r\n-- +goose no transaction\r\n{down}\r\n",
     );
     repo.write("migrations/10_sections.sql", sql.as_bytes());
     repo.write("migrations/+3_.sql", b"-- +goose Up\n");
