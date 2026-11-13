@@ -1,0 +1,34 @@
+# Copy as .gitlab-ci.yml in the fork, or add equivalent rules and job there.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - when: never
+
+dmg:fork-advisory:
+  stage: test
+  # The digest must be available to the fork without upstream registry credentials.
+  image: registry.gitlab.com/your-org/migration-ci/dmg@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  variables:
+    GIT_STRATEGY: empty
+    GIT_SUBMODULE_STRATEGY: none
+    CI_DEBUG_TRACE: "false"
+    CI_DEBUG_SERVICES: "false"
+    DMG_GITLAB_ORIGIN: "https://gitlab.com"
+    DMG_CONFIG_PATH: ".dmg/dmg.toml"
+    DMG_BINARY_SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  rules:
+    - if: '$CI_PROJECT_ID == $CI_MERGE_REQUEST_SOURCE_PROJECT_ID && $CI_PROJECT_ID != $CI_MERGE_REQUEST_PROJECT_ID'
+    - when: never
+  dependencies: []
+  cache: []
+  timeout: 10m
+  allow_failure: true
+  script:
+    - PATH=/usr/local/bin:/usr/bin:/bin /usr/local/bin/python3 -I /opt/dmg/gate.py advisory
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - dmg-reports/report.json
+      - dmg-reports/report.md
+      - dmg-reports/provenance.json

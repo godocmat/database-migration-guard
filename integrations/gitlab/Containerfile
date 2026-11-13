@@ -1,0 +1,8 @@
+# Docker Official Python 3.13.18, Debian trixie, linux/amd64 manifest.
+FROM docker.io/library/python:3.13.18-trixie@sha256:bcaf104ef2827b827bdd0b8b351742783fc050296e1dc150113e6ec869e652d0
+ARG DMG_BINARY_SHA256
+COPY --chmod=0444 integrations/gitlab/gate.py /opt/dmg/gate.py
+COPY --chmod=0555 dmg /opt/dmg/dmg
+RUN printf '%s  /opt/dmg/dmg\n' "$DMG_BINARY_SHA256" | sha256sum --check --strict - \
+    && git --version \
+    && /opt/dmg/dmg --version
