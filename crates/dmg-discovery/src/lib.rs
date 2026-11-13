@@ -2,10 +2,12 @@
 
 mod git;
 mod integrity;
+mod manifest;
 mod sqlx;
 mod worktree;
 
 pub use git::GitRevisions;
+pub use manifest::{ManifestError, compare_integrity_manifest, reconcile_applied_manifest};
 pub use sqlx::SqlxLayout;
 
 use std::{
@@ -29,7 +31,7 @@ use thiserror::Error;
 pub fn discover_worktree(repository: &Path, options: &DiscoveryOptions) -> Discovery {
     let mut inventory = Inventory::default();
     worktree::collect(repository, options, &mut inventory);
-    inventory.finish()
+    inventory.finish(options)
 }
 
 /// Compare explicit local commits and load the candidate sources from raw Git blobs.
@@ -38,8 +40,8 @@ pub fn discover_git(
     revisions: &GitRevisions,
     options: &DiscoveryOptions,
 ) -> Discovery {
-    let baseline = git::collect(repository, &revisions.base, "base", options).finish();
-    let mut head = git::collect(repository, &revisions.head, "head", options).finish();
+    let baseline = git::collect(repository, &revisions.base, "base", options).finish(options);
+    let mut head = git::collect(repository, &revisions.head, "head", options).finish(options);
     if baseline.plan.coverage.gaps().is_empty() && head.plan.coverage.gaps().is_empty() {
         let basis = IntegrityBasis::Git {
             base_commit: revisions.base.clone(),
@@ -83,6 +85,8 @@ pub fn discover_git(
 pub struct Discovery {
     pub plan: MigrationPlan,
     sources: BTreeMap<RepoPath, Vec<u8>>,
+    head_complete: bool,
+    options: DiscoveryOptions,
 }
 
 impl Discovery {
@@ -255,6 +259,13 @@ struct Candidate {
 }
 
 impl Adapter {
+    fn kind(&self) -> MigrationAdapter {
+        match self {
+            Self::Plain(_) => MigrationAdapter::Plain,
+            Self::Sqlx(_) => MigrationAdapter::Sqlx,
+        }
+    }
+
     fn candidate(&self, filename: &str) -> Result<Option<Candidate>, &'static str> {
         let plain = match self {
             Self::Plain(plain) => plain,
@@ -314,7 +325,7 @@ impl Inventory {
         self.sources.insert(path, bytes);
     }
 
-    fn finish(mut self) -> Discovery {
+    fn finish(mut self, options: &DiscoveryOptions) -> Discovery {
         self.files.sort_by(|left, right| {
             (&left.identity, left.direction, &left.path).cmp(&(
                 &right.identity,
@@ -346,6 +357,8 @@ impl Inventory {
                 .collect()
         });
         Discovery {
+            head_complete: self.gaps.is_empty(),
+            options: options.clone(),
             plan: MigrationPlan {
                 inventory: self.files,
                 selected_forwards,

@@ -352,3 +352,104 @@ fn commit(repo: &Path, message: &str) -> String {
     git(repo, &["commit", "--quiet", "--no-gpg-sign", "-m", message]);
     git(repo, &["rev-parse", "HEAD"])
 }
+
+#[test]
+fn integrity_and_applied_manifests_classify_independent_evidence() {
+    use dmg_core::migration::{AppliedStatus, IntegrityStatus};
+    let repo = TestRepo::new().unwrap();
+    let one = b"SELECT 1;";
+    let two = b"SELECT 2;";
+    let changed_two = b"SELECT 20;";
+    let three = b"SELECT 3;";
+    let four = b"SELECT 4;";
+    let five = b"SELECT 5;";
+    repo.write("migrations/1_a.sql", one);
+    repo.write("migrations/2_b.sql", changed_two);
+    repo.write("migrations/4_d.sql", four);
+    repo.write("migrations/5_e.sql", five);
+
+    let mut discovery = discover_worktree(&repo.0, &plain(DiscoveryLimits::default()));
+    assert!(discovery.plan.applied_history.is_none());
+    let baseline = serde_json::to_vec(&serde_json::json!({
+        "schema_version": 1,
+        "adapter": "plain",
+        "migrations": [
+            {"version": 1, "direction": "forward", "path": "migrations/1_a.sql", "sha256": ContentDigest::of(one)},
+            {"version": 2, "direction": "forward", "path": "migrations/2_b.sql", "sha256": ContentDigest::of(two)},
+            {"version": 3, "direction": "forward", "path": "migrations/3_c.sql", "sha256": ContentDigest::of(three)},
+        ],
+    })).unwrap();
+    let applied = serde_json::to_vec(&serde_json::json!({
+        "schema_version": 1,
+        "adapter": "plain",
+        "migrations": [
+            {"version": 1, "status": "applied", "sha256": ContentDigest::of(one)},
+            {"version": 2, "status": "applied", "sha256": ContentDigest::of(two)},
+            {"version": 3, "status": "applied", "sha256": ContentDigest::of(three)},
+            {"version": 5, "status": "failed", "sha256": ContentDigest::of(five)},
+        ],
+    }))
+    .unwrap();
+
+    let baseline_digest = ContentDigest::of(&baseline);
+    let applied_digest = ContentDigest::of(&applied);
+    assert!(matches!(
+        dmg_discovery::compare_integrity_manifest(&mut discovery, &baseline, applied_digest),
+        Err(dmg_discovery::ManifestError::DigestMismatch)
+    ));
+    assert!(discovery.plan.integrity.is_none());
+    dmg_discovery::compare_integrity_manifest(&mut discovery, &baseline, baseline_digest).unwrap();
+    assert!(discovery.plan.applied_history.is_none());
+    dmg_discovery::reconcile_applied_manifest(&mut discovery, &applied, applied_digest).unwrap();
+
+    let integrity = discovery.plan.integrity.as_ref().unwrap();
+    assert_eq!(
+        integrity
+            .changes
+            .iter()
+            .map(|row| row.status)
+            .collect::<Vec<_>>(),
+        [
+            IntegrityStatus::Unchanged,
+            IntegrityStatus::Modified,
+            IntegrityStatus::Missing,
+            IntegrityStatus::New,
+            IntegrityStatus::New,
+        ]
+    );
+    let history = discovery.plan.applied_history.as_ref().unwrap();
+    assert_eq!(
+        history
+            .migrations
+            .iter()
+            .map(|row| row.status)
+            .collect::<Vec<_>>(),
+        [
+            AppliedStatus::Applied,
+            AppliedStatus::Modified,
+            AppliedStatus::Missing,
+            AppliedStatus::Pending,
+            AppliedStatus::Failed,
+        ]
+    );
+}
+
+#[test]
+fn applied_history_can_be_verified_when_only_the_git_base_is_missing() {
+    let repo = TestRepo::new().unwrap();
+    init_git(&repo.0);
+    repo.write("migrations/1_first.sql", b"SELECT 1;");
+    let head = commit(&repo.0, "candidate");
+    let revisions = dmg_discovery::GitRevisions::new(&"0".repeat(40), &head).unwrap();
+    let mut discovery =
+        dmg_discovery::discover_git(&repo.0, &revisions, &plain(DiscoveryLimits::default()));
+    let applied = br#"{"schema_version":1,"adapter":"plain","migrations":[]}"#;
+    dmg_discovery::reconcile_applied_manifest(&mut discovery, applied, ContentDigest::of(applied))
+        .unwrap();
+    assert_eq!(
+        discovery.plan.applied_history.unwrap().migrations[0].status,
+        dmg_core::migration::AppliedStatus::Pending
+    );
+    assert_eq!(discovery.plan.coverage.status(), CoverageStatus::Incomplete);
+    assert!(discovery.plan.integrity.is_none());
+}
