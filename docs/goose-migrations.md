@@ -2,6 +2,15 @@
 
 The Goose adapter models SQL migrations for Goose v3.30.1 with the standard PostgreSQL CLI driver and version tracking. Configure one repository-relative migration root. Goose reads its immediate lowercase .sql files and orders them by the positive signed 64-bit integer before the first underscore. Numeric aliases such as 02 and +2 share the same identity. Guard reports duplicate identities, malformed SQL filenames, and versioned Go migrations as incomplete. [Native discovery](https://github.com/pressly/goose/blob/v3.30.1/migrate.go) · [Version parsing](https://github.com/pressly/goose/blob/v3.30.1/migration.go)
 
+```toml
+schema_version = 1
+target = 18
+roots = ["migrations"]
+
+[adapter]
+kind = "goose"
+```
+
 A migration requires an Up annotation. An explicit Down annotation creates a second inventory record with the same path, identity, and original-file SHA-256. The forward plan executes only Up ranges. A file with no Down annotation supplies no rollback SQL. The pinned Goose CLI can still remove its applied version on Down without reversing the schema. A change confined to Down also changes the file digest used by forward integrity checks. [Native Down observations](../fixtures/dmg-09/goose/README.md#discovery-and-history)
 
 Guard records one original byte range per query. Goose normally wraps a direction's queries and version update in a transaction. A NO TRANSACTION annotation disables the wrapper for the whole file, even when it appears in Down. Individual queries can still contain more than one PostgreSQL statement. StatementBegin and StatementEnd keep a group together and can terminate it without a final semicolon. Outside a group, the last whitespace-delimited word before a word beginning with double dash must end in a semicolon to close the query. On an existing table, a concurrent index can run on its own in an unwrapped migration and can fail when it shares a query with other statements. [Pinned annotation parser](https://github.com/pressly/goose/blob/v3.30.1/internal/sqlparser/parser.go) · [Execution and history](https://github.com/pressly/goose/blob/v3.30.1/migration_sql.go) · [Native transaction observations](../fixtures/dmg-09/goose/README.md#transaction-and-annotation-behavior)

@@ -32,6 +32,8 @@ For SQLx 0.8.6, use `[adapter]` with `kind = "sqlx"` and `layout = "simple"` or 
 
 For Flyway OSS 13.12.2, set `kind = "flyway"` and mirror the runner's `execute_in_transaction`, `mixed`, and `transactional_lock` settings. [Flyway configuration and limits](flyway-migrations.md)
 
+For Goose 3.30.1, set `kind = "goose"` and supply one migration root. Combined SQL files retain distinct Up and Down inventory entries when both directions are authored. [Goose configuration and limits](goose-migrations.md)
+
 For Supabase CLI 3.0.0, set `kind = "supabase"` and supply one root, typically `roots = ["supabase/migrations"]`. [Supabase configuration and limits](supabase-migrations.md)
 
 ## Trusted inputs
