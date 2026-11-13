@@ -113,7 +113,7 @@ An absent, stale, mismatched, or malformed required rehearsal gives an incomplet
 
 ## Review formats
 
-Render a saved version 1 JSON report as a Markdown summary or GitHub Actions annotations. Both formats bound their output and escape report-supplied content. Rendering returns success when the requested output is written. Use the original `dmg check` status for the gate decision.
+Render a saved version 1 JSON report as Markdown, GitHub Actions annotations, standalone HTML, SARIF 2.1.0, or GitLab Code Quality. Rendering returns success when the requested output is written. Use the original `dmg check` status for the gate decision. [Saved report formats](report-formats.md)
 
 ```sh
 dmg report --input report.json --format markdown --output summary.md

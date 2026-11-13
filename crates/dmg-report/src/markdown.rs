@@ -1,20 +1,24 @@
 use std::io::{self, Write};
 
 use dmg_core::{
-    coverage::{CoverageStatus, DiagnosticScope},
+    coverage::DiagnosticScope,
     migration::{IntegrityBasis, MigrationAdapter},
-    policy::{DecisionReasonKind, DecisionStatus},
+    policy::PolicyAuditV1,
     report::ReportV1,
-    risk::{DatabaseObject, EvidenceKind, Finding, RelationLock},
+    risk::{DatabaseObject, Finding},
     source::SourceSpan,
 };
 
-use crate::{bounded_line, gap_name, prioritized, severity_name};
+use crate::{
+    bounded_line, coverage_name, decision_name, evidence_name, gap_name, lock_name, object_label,
+    prioritized, reason_name, rehearsal_outcome_name, severity_name, source_label,
+};
 
 const MAX_FINDINGS: usize = 30;
 const MAX_GAPS: usize = 12;
 const MAX_REASONS: usize = 12;
 const MAX_LOCKS: usize = 12;
+const MAX_POLICY_MATCHES: usize = 12;
 const MAX_RELATED_PATHS: usize = 3;
 const MAX_FINDING_EVIDENCE: usize = 2;
 const MAX_TEXT_BYTES: usize = 360;
@@ -22,17 +26,9 @@ const MAX_IDENTIFIER_BYTES: usize = 240;
 
 /// Render a bounded GitHub Flavored Markdown summary from a saved report.
 pub fn write_markdown(report: &ReportV1, mut output: impl Write) -> io::Result<()> {
-    let status = match report.decision().map(|decision| decision.status) {
-        Some(DecisionStatus::Pass) => "Pass",
-        Some(DecisionStatus::Denied) => "Denied",
-        Some(DecisionStatus::Incomplete) => "Incomplete",
-        None => "Scan",
-    };
+    let status = decision_name(report.decision().map(|decision| decision.status));
     let metadata = report.metadata();
-    let coverage = match report.coverage().status() {
-        CoverageStatus::Complete => "Complete",
-        CoverageStatus::Incomplete => "Incomplete",
-    };
+    let coverage = coverage_name(report.coverage().status());
     writeln!(output, "## Database Migration Guard · {status}\n")?;
     writeln!(
         output,
@@ -69,14 +65,7 @@ pub fn write_markdown(report: &ReportV1, mut output: impl Write) -> io::Result<(
         if !decision.reasons.is_empty() {
             writeln!(output, "\n### Gate reasons\n")?;
             for reason in decision.reasons.iter().take(MAX_REASONS) {
-                let kind = match reason.kind {
-                    DecisionReasonKind::SeverityThreshold => "Severity threshold",
-                    DecisionReasonKind::IntegrityViolation => "Integrity violation",
-                    DecisionReasonKind::RequiredCoverage => "Required coverage",
-                    DecisionReasonKind::RequiredEvidence => "Required evidence",
-                    DecisionReasonKind::ApprovalRequired => "Approval required",
-                    DecisionReasonKind::RehearsalFailed => "Rehearsal failed",
-                };
+                let kind = reason_name(reason.kind);
                 writeln!(output, "- **{kind}** · {}", prose(&reason.message))?;
             }
             write_omitted(
@@ -86,6 +75,10 @@ pub fn write_markdown(report: &ReportV1, mut output: impl Write) -> io::Result<(
                 "gate reasons",
             )?;
         }
+    }
+
+    if let Some(audit) = report.policy_audit() {
+        write_policy_audit(&mut output, audit)?;
     }
 
     let gaps = report.coverage().gaps();
@@ -160,12 +153,7 @@ pub fn write_markdown(report: &ReportV1, mut output: impl Write) -> io::Result<(
     if !locks.is_empty() {
         writeln!(output, "\n### Predicted relation locks\n")?;
         for lock in locks.iter().take(MAX_LOCKS) {
-            let mode = match lock.mode {
-                RelationLock::ShareUpdateExclusive => "SHARE UPDATE EXCLUSIVE",
-                RelationLock::Share => "SHARE",
-                RelationLock::ShareRowExclusive => "SHARE ROW EXCLUSIVE",
-                RelationLock::AccessExclusive => "ACCESS EXCLUSIVE",
-            };
+            let mode = lock_name(lock.mode);
             writeln!(
                 output,
                 "- **{mode}** on {} at {}",
@@ -174,6 +162,64 @@ pub fn write_markdown(report: &ReportV1, mut output: impl Write) -> io::Result<(
             )?;
         }
         write_omitted(&mut output, locks.len(), MAX_LOCKS, "lock predictions")?;
+    }
+    Ok(())
+}
+
+fn write_policy_audit(output: &mut impl Write, audit: &PolicyAuditV1) -> io::Result<()> {
+    writeln!(output, "\n### Policy evidence\n")?;
+    writeln!(
+        output,
+        "- Evidence bundle SHA-256 `{}`",
+        audit.evidence_sha256
+    )?;
+    writeln!(
+        output,
+        "- Repository {} · target {}",
+        literal(audit.repository_id.as_str(), 128),
+        literal(audit.target_id.as_str(), 128)
+    )?;
+    if let Some(commit) = &audit.baseline_reference_commit {
+        writeln!(output, "- Baseline commit {}", literal(commit, 64))?;
+    }
+    for matched in audit.baseline_matches.iter().take(MAX_POLICY_MATCHES) {
+        writeln!(
+            output,
+            "- Baseline match **{}** · `{}`",
+            matched.rule_id, matched.finding_fingerprint
+        )?;
+    }
+    write_omitted(
+        output,
+        audit.baseline_matches.len(),
+        MAX_POLICY_MATCHES,
+        "baseline matches",
+    )?;
+    for approval in audit.approvals.iter().take(MAX_POLICY_MATCHES) {
+        writeln!(
+            output,
+            "- Approved **{}** · `{}` · {} · expires at Unix time {}",
+            approval.rule_id,
+            approval.finding_fingerprint,
+            literal(approval.approver.as_str(), 128),
+            approval.expires_at_unix_seconds
+        )?;
+    }
+    write_omitted(
+        output,
+        audit.approvals.len(),
+        MAX_POLICY_MATCHES,
+        "approvals",
+    )?;
+    if let Some(rehearsal) = &audit.rehearsal {
+        writeln!(
+            output,
+            "- Rehearsal **{}** · report SHA-256 `{}` · binding SHA-256 `{}` · completed at Unix time {}",
+            rehearsal_outcome_name(rehearsal.outcome),
+            rehearsal.report_sha256,
+            rehearsal.binding_sha256,
+            rehearsal.completed_at_unix_seconds
+        )?;
     }
     Ok(())
 }
@@ -197,12 +243,7 @@ fn write_finding(output: &mut impl Write, finding: &Finding) -> io::Result<()> {
         writeln!(output, "  - **Impact** · {}", prose(&finding.impact))?;
     }
     for evidence in finding.evidence.iter().take(MAX_FINDING_EVIDENCE) {
-        let label = match evidence.kind {
-            EvidenceKind::InputFact => "Input fact",
-            EvidenceKind::StaticPrediction => "Static prediction",
-            EvidenceKind::CatalogEstimate => "Catalog estimate",
-            EvidenceKind::SimulationObservation => "Simulation observation",
-        };
+        let label = evidence_name(evidence.kind);
         writeln!(output, "  - **{label}** · {}", prose(&evidence.detail))?;
     }
     let omitted = finding.evidence.len().saturating_sub(MAX_FINDING_EVIDENCE);
@@ -233,24 +274,11 @@ fn write_omitted(
 }
 
 fn location(span: &SourceSpan) -> String {
-    let path = bounded_line(span.path.as_str(), MAX_IDENTIFIER_BYTES);
-    code_span(&format!("{path}:{}:{}", span.start.line, span.start.column))
+    code_span(&source_label(span, MAX_IDENTIFIER_BYTES))
 }
 
 fn object_name(object: &DatabaseObject) -> String {
-    let mut name = String::new();
-    for component in object
-        .schema
-        .iter()
-        .chain([&object.name])
-        .chain(&object.member)
-    {
-        if !name.is_empty() {
-            name.push('.');
-        }
-        name.push_str(&bounded_line(component, MAX_IDENTIFIER_BYTES / 3));
-    }
-    code_span(&name)
+    code_span(&object_label(object, MAX_IDENTIFIER_BYTES / 3))
 }
 
 fn literal(value: &str, max_bytes: usize) -> String {

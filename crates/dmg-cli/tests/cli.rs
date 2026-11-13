@@ -57,6 +57,37 @@ fn renders_a_denied_saved_report_without_replacing_the_gate_status() {
     assert!(annotations.contains("migrations/002_update.sql"));
     assert_eq!(project.read_report()["decision"]["status"], "denied");
 
+    let html = project.run(&["report", "--input", "report.json", "--format", "html"]);
+    assert_exit(&html, 0);
+    let html = String::from_utf8(html.stdout).unwrap();
+    assert!(html.contains("<strong>Denied</strong>"));
+    assert!(html.contains("HIGH PG006"));
+    assert!(!html.contains("UPDATE public.items SET id = 7"));
+
+    let sarif = project.run(&["report", "--input", "report.json", "--format", "sarif"]);
+    assert_exit(&sarif, 0);
+    let sarif: Value = serde_json::from_slice(&sarif.stdout).unwrap();
+    let run = &sarif["runs"][0];
+    assert_eq!(sarif["version"], "2.1.0");
+    assert_eq!(run["properties"]["dmgDecision"], "denied");
+    assert_eq!(run["invocations"][0]["executionSuccessful"], true);
+    let result = &run["results"][0];
+    assert_eq!(result["ruleId"], "PG006");
+    assert_eq!(
+        result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+        "migrations/002_update.sql"
+    );
+
+    let code_quality = project.run(&["report", "--input", "report.json", "--format", "gitlab"]);
+    assert_exit(&code_quality, 0);
+    let code_quality: Value = serde_json::from_slice(&code_quality.stdout).unwrap();
+    assert_eq!(code_quality[0]["check_name"], "PG006");
+    assert_eq!(code_quality[0]["severity"], "critical");
+    assert_eq!(
+        code_quality[0]["fingerprint"],
+        result["fingerprints"]["dmgFinding/v1"]
+    );
+
     project.write("bad-report.json", r#"{"schema_version":9}"#);
     let invalid = project.run(&[
         "report",
@@ -72,6 +103,36 @@ fn renders_a_denied_saved_report_without_replacing_the_gate_status() {
         fs::read_to_string(project.path("summary.md")).unwrap(),
         summary
     );
+}
+
+#[test]
+fn machine_review_rejects_invalid_source_paths_before_output() {
+    let project = Fixture::new();
+    project.write(
+        "migrations/002_update.sql",
+        "UPDATE public.items SET id = 7;",
+    );
+    let checked = project.check();
+    assert_exit(&checked, 1);
+    let mut saved = report(&checked);
+    saved["findings"][0]["span"]["path"] = json!("migrations/line\nbreak.sql");
+    project.write("report.json", serde_json::to_vec(&saved).unwrap());
+    project.write("review.json", "previous review");
+
+    for format in ["gitlab", "sarif"] {
+        let args = ["report", "--input", "report.json", "--format", format];
+        let stdout = project.run(&args);
+        assert_exit(&stdout, 2);
+        assert!(stdout.stdout.is_empty());
+        assert!(!String::from_utf8_lossy(&stdout.stderr).contains("line"));
+
+        let file = project.run(&[args.as_slice(), &["--output", "review.json"]].concat());
+        assert_exit(&file, 2);
+        assert_eq!(
+            fs::read(project.path("review.json")).unwrap(),
+            b"previous review"
+        );
+    }
 }
 
 #[test]

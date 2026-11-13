@@ -477,6 +477,8 @@ name = "dmg-report"
 version = "0.1.0"
 dependencies = [
  "dmg-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

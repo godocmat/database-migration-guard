@@ -1,16 +1,101 @@
-//! Bounded pull request output from a versioned Guard report.
+//! Review output from a versioned Guard report.
 #![forbid(unsafe_code)]
 
 mod github;
+mod gitlab;
+mod html;
+mod machine;
 mod markdown;
+mod sarif;
 
 use dmg_core::{
-    coverage::CoverageGapKind,
-    risk::{Finding, Severity},
+    coverage::{CoverageGapKind, CoverageStatus},
+    policy::{DecisionReasonKind, DecisionStatus},
+    rehearsal::RehearsalOutcome,
+    risk::{DatabaseObject, EvidenceKind, Finding, RelationLock, Severity},
+    source::SourceSpan,
 };
 
 pub use github::write_github_annotations;
+pub use gitlab::write_gitlab_code_quality;
+pub use html::write_html;
 pub use markdown::write_markdown;
+pub use sarif::write_sarif;
+
+fn decision_name(status: Option<DecisionStatus>) -> &'static str {
+    match status {
+        Some(DecisionStatus::Pass) => "Pass",
+        Some(DecisionStatus::Denied) => "Denied",
+        Some(DecisionStatus::Incomplete) => "Incomplete",
+        None => "Scan",
+    }
+}
+
+fn coverage_name(status: CoverageStatus) -> &'static str {
+    match status {
+        CoverageStatus::Complete => "Complete",
+        CoverageStatus::Incomplete => "Incomplete",
+    }
+}
+
+fn reason_name(kind: DecisionReasonKind) -> &'static str {
+    match kind {
+        DecisionReasonKind::SeverityThreshold => "Severity threshold",
+        DecisionReasonKind::IntegrityViolation => "Integrity violation",
+        DecisionReasonKind::RequiredCoverage => "Required coverage",
+        DecisionReasonKind::RequiredEvidence => "Required evidence",
+        DecisionReasonKind::ApprovalRequired => "Approval required",
+        DecisionReasonKind::RehearsalFailed => "Rehearsal failed",
+    }
+}
+
+fn rehearsal_outcome_name(outcome: RehearsalOutcome) -> &'static str {
+    match outcome {
+        RehearsalOutcome::Succeeded => "Succeeded",
+        RehearsalOutcome::Failed => "Failed",
+        RehearsalOutcome::Incomplete => "Incomplete",
+        RehearsalOutcome::TimedOut => "Timed out",
+    }
+}
+
+fn lock_name(mode: RelationLock) -> &'static str {
+    match mode {
+        RelationLock::ShareUpdateExclusive => "SHARE UPDATE EXCLUSIVE",
+        RelationLock::Share => "SHARE",
+        RelationLock::ShareRowExclusive => "SHARE ROW EXCLUSIVE",
+        RelationLock::AccessExclusive => "ACCESS EXCLUSIVE",
+    }
+}
+
+fn evidence_name(kind: EvidenceKind) -> &'static str {
+    match kind {
+        EvidenceKind::InputFact => "Input fact",
+        EvidenceKind::StaticPrediction => "Static prediction",
+        EvidenceKind::CatalogEstimate => "Catalog estimate",
+        EvidenceKind::SimulationObservation => "Simulation observation",
+    }
+}
+
+fn source_label(span: &SourceSpan, max_path_bytes: usize) -> String {
+    let path = bounded_line(span.path.as_str(), max_path_bytes);
+    format!("{path}:{}:{}", span.start.line, span.start.column)
+}
+
+fn object_label(object: &DatabaseObject, max_component_bytes: usize) -> String {
+    let mut name = String::new();
+    for component in object
+        .schema
+        .iter()
+        .chain([&object.name])
+        .chain(&object.member)
+    {
+        if !name.is_empty() {
+            name.push('.');
+        }
+        name.push_str(&bounded_line(component, max_component_bytes));
+    }
+    name
+}
 
 fn prioritized(findings: &[Finding]) -> impl Iterator<Item = &Finding> {
     [

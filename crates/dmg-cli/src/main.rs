@@ -161,6 +161,9 @@ enum ReportFormat {
 enum ReviewFormat {
     Markdown,
     Github,
+    Html,
+    Sarif,
+    Gitlab,
 }
 
 fn parse_target(value: &str) -> Result<PostgresTarget, &'static str> {
@@ -261,8 +264,17 @@ fn render_saved_report(
     write_report(output, |out| match format {
         ReviewFormat::Markdown => dmg_report::write_markdown(&report, out),
         ReviewFormat::Github => dmg_report::write_github_annotations(&report, out),
+        ReviewFormat::Html => dmg_report::write_html(&report, out),
+        ReviewFormat::Sarif => dmg_report::write_sarif(&report, out),
+        ReviewFormat::Gitlab => dmg_report::write_gitlab_code_quality(&report, out),
     })
-    .map_err(|_| Failure::operational("could not write the review output", OPERATIONAL_FAILURE))?;
+    .map_err(|error| {
+        if error.kind() == io::ErrorKind::InvalidData {
+            Failure::invalid("saved report contains an invalid review source location")
+        } else {
+            Failure::operational("could not write the review output", OPERATIONAL_FAILURE)
+        }
+    })?;
     Ok(0)
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "dmg-report"
-description = "Pull request report renderers for Database Migration Guard"
+description = "Review report renderers for Database Migration Guard"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,3 +8,5 @@ publish.workspace = true
 
 [dependencies]
 dmg-core = { path = "../dmg-core" }
+serde.workspace = true
+serde_json.workspace = true
