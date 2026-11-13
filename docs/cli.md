@@ -30,6 +30,10 @@ Select PostgreSQL `17` or `18`. Roots are relative to `--repo`, which defaults t
 
 For SQLx 0.8.6, use `[adapter]` with `kind = "sqlx"` and `layout = "simple"` or `"reversible"`. Reversible Down files remain in the integrity inventory. [Migration discovery and transaction modes](migration-formats.md)
 
+For Flyway OSS 13.12.2, set `kind = "flyway"` and mirror the runner's `execute_in_transaction`, `mixed`, and `transactional_lock` settings. [Flyway configuration and limits](flyway-migrations.md)
+
+For Supabase CLI 3.0.0, set `kind = "supabase"` and supply one root, typically `roots = ["supabase/migrations"]`. [Supabase configuration and limits](supabase-migrations.md)
+
 ## Trusted inputs
 
 With no revision arguments, Guard scans the working directory. Supply both `--base` and `--head` to use exact local commits. Each argument is a full Git object ID. Guard reads the candidate migration bytes from Git even if the checked-out files differ. A missing commit or blob yields incomplete coverage. Both the project configuration and policy remain explicit files supplied by the caller.
@@ -58,7 +62,7 @@ deny_missing = true
 severity = "medium"
 ```
 
-`schema_version = 1` alone selects defaults. The default threshold is `high`. Integrity changes classified as modified or missing deny by default when a baseline is supplied. `require_git_base` defaults to false. When true, the check requires a complete comparison between the trusted Git base and candidate. Per-rule overrides appear as effective severities in the check report. A finding emitted as critical remains critical. `policy validate` rejects unknown fields, versions, and rule IDs.
+`schema_version = 1` alone selects defaults. The default threshold is `high`. With a baseline, the default policy denies edits to versioned migrations and missing migrations, including removed Flyway repeatables. Edited repeatables remain selected for analysis and the finding threshold applies. `require_git_base` defaults to false. When true, the check requires a complete comparison between the trusted Git base and candidate. Per-rule overrides appear as effective severities in the check report. A finding emitted as critical remains critical. `policy validate` rejects unknown fields, versions, and rule IDs.
 
 | Exit | Meaning |
 | --- | --- |
