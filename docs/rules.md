@@ -14,7 +14,7 @@ Guard evaluates rules over the ordered forward migration inventory. For a Git co
 
 Reports can also carry predicted relation locks for passing or risky DDL. For example, a constant-default column add can avoid a rewrite while requesting `ACCESS EXCLUSIVE`. The prediction does not measure lock duration, production workload, or migration runtime. [PostgreSQL table locks](https://www.postgresql.org/docs/18/explicit-locking.html) · [PostgreSQL ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html) · [PostgreSQL CREATE INDEX](https://www.postgresql.org/docs/18/sql-createindex.html)
 
-Scope is limited to [supported parser operations](postgresql-support.md) and statically established schema and runner facts. Read-only catalog sizes, declared application contracts, and production evidence belong to later milestones. The scanner preserves incomplete coverage and existing findings when a migration contains an unsupported statement or unresolved condition.
+The rules use [supported parser operations](postgresql-support.md) and statically established schema and runner facts. An optional pinned [catalog observation](catalog-context.md) adds scoped relation facts and labeled size estimates to relevant findings. Use [application contracts](application-contracts.md) with `dmg diff` to evaluate declared dependencies. The scanner preserves incomplete coverage and existing findings when a migration contains an unsupported statement or unresolved condition.
 
 Run the focused rules and the full public development corpus from the workspace root. The corpus command requires Git and Python 3.
 
