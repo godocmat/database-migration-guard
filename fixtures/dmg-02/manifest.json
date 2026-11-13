@@ -1,0 +1,1452 @@
+{
+  "schema_version": 1,
+  "split": "development",
+  "migration_root": "migrations",
+  "postgres": {
+    "17": "17.12",
+    "18": "18.7"
+  },
+  "sqlx_version": "0.8.6",
+  "policy": {
+    "coverage_required": true,
+    "trusted_git_base_required": true,
+    "applied_history_required": false,
+    "deny_at_or_above": "HIGH",
+    "deny_git_status": ["modified", "missing"],
+    "check_precedence": [2, 3, 1, 0]
+  },
+  "applied_status": "unknown",
+  "profiles": {
+    "plain": {
+      "adapter": "plain",
+      "runner": "psql",
+      "format": "simple",
+      "filename_pattern": "^([0-9]+)_[a-z][a-z0-9_]*\\.sql$",
+      "version_order": "positive-integer",
+      "baseline": "simple",
+      "mode": "psql-file-transaction"
+    },
+    "sqlx-simple": {
+      "adapter": "sqlx",
+      "runner": "sqlx",
+      "format": "simple",
+      "baseline": "simple",
+      "mode": "sqlx-file-transaction"
+    },
+    "sqlx-reversible": {
+      "adapter": "sqlx",
+      "runner": "sqlx",
+      "format": "reversible",
+      "baseline": "reversible",
+      "mode": "sqlx-file-transaction"
+    }
+  },
+  "modes": {
+    "psql-file-transaction": {
+      "runner": "psql",
+      "description": "One psql -X -v ON_ERROR_STOP=1 --single-transaction --file invocation per migration."
+    },
+    "psql-autocommit": {
+      "runner": "psql",
+      "description": "One psql -X -v ON_ERROR_STOP=1 --file invocation per migration, with autocommit."
+    },
+    "psql-explicit": {
+      "runner": "psql",
+      "description": "Use the unwrapped psql --file invocation and take transaction boundaries from BEGIN and COMMIT in the SQL."
+    },
+    "sqlx-file-transaction": {
+      "runner": "sqlx",
+      "description": "sqlx migrate run wraps the migration and its essential history write."
+    },
+    "sqlx-opt-out-single": {
+      "runner": "sqlx",
+      "description": "The byte-zero directive opts out of SQLx's wrapper. The single statement executes in one simple Query."
+    },
+    "sqlx-opt-out-batch": {
+      "runner": "sqlx",
+      "description": "The byte-zero directive opts out of SQLx's wrapper. Multiple statements execute in one simple Query with an implicit PostgreSQL block."
+    }
+  },
+  "baselines": {
+    "simple": [
+      ["migrations/001_base.sql", "inputs/base.sql"]
+    ],
+    "reversible": [
+      ["migrations/001_base.up.sql", "inputs/base.sql"],
+      ["migrations/001_base.down.sql", "inputs/base-down.sql"]
+    ]
+  },
+  "seeds_after_version": 1,
+  "seeds": {
+    "schema-only": [],
+    "clean": ["inputs/seed-clean.sql"],
+    "null-email": ["inputs/seed-clean.sql", "inputs/seed-null-email.sql"],
+    "orphan-event": ["inputs/seed-clean.sql", "inputs/seed-orphan-event.sql"]
+  },
+  "cases": [
+    {
+      "id": "D01",
+      "description": "Numeric version order and top-level discovery.",
+      "paired_with": ["D02", "D03"],
+      "variants": [
+        {
+          "id": "numeric-order",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/10_add_flag.sql", "inputs/add-probe-flag.sql"],
+            ["migrations/2_create_probe.sql", "inputs/create-probe.sql"],
+            ["migrations/README.sql", "inputs/ignored.sql"],
+            ["migrations/archive/3_scratch.sql", "inputs/ignored.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2, 10],
+            "selected": [2, 10],
+            "ignored": ["migrations/README.sql", "migrations/archive/3_scratch.sql"]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2, 10]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "D02",
+      "description": "The early ALTER precedes the only CREATE for its target.",
+      "paired_with": ["D01"],
+      "variants": [
+        {
+          "id": "dependency-reversed",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/2_add_flag.sql", "inputs/add-probe-flag.sql"],
+            ["migrations/10_create_probe.sql", "inputs/create-probe.sql"],
+            ["migrations/README.sql", "inputs/ignored.sql"],
+            ["migrations/archive/3_scratch.sql", "inputs/ignored.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2, 10],
+            "selected": [2, 10],
+            "ignored": ["migrations/README.sql", "migrations/archive/3_scratch.sql"]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2, 10]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG007",
+                  "severity": "HIGH",
+                  "path": "migrations/2_add_flag.sql",
+                  "anchor": "ALTER TABLE app.probe",
+                  "object": "app.probe",
+                  "basis": "The only creation is migrations/10_create_probe.sql at version 10."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "D03",
+      "description": "Leading zeros collide with the same positive numeric identity.",
+      "paired_with": ["D01"],
+      "variants": [
+        {
+          "id": "duplicate-forward",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/2_add_flag.sql", "inputs/add-account-flag.sql"],
+            ["migrations/02_add_label.sql", "inputs/add-label.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2, 2],
+            "selected": null,
+            "duplicate_forward": ["migrations/02_add_label.sql", "migrations/2_add_flag.sql"]
+          },
+          "git": null,
+          "outcomes": {
+            "all": {
+              "coverage": "incomplete",
+              "check_exit": 3,
+              "diagnostics": [
+                {
+                  "kind": "duplicate_forward",
+                  "paths": ["migrations/02_add_label.sql", "migrations/2_add_flag.sql"],
+                  "detail": "Both paths claim forward identity 2."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "D04",
+      "description": "A reversible Up is selected and its destructive Down is inventoried.",
+      "paired_with": ["D05", "S01"],
+      "variants": [
+        {
+          "id": "matched-pair",
+          "profiles": ["sqlx-reversible"],
+          "write": [
+            ["migrations/002_label.up.sql", "inputs/add-label.sql"],
+            ["migrations/002_label.down.sql", "inputs/drop-label.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2],
+            "down": [1, 2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "absent": ["PG001"],
+              "context": "Only the Up contributes forward statements."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "D05",
+      "description": "The proposed Guard pair contract requires an Up and Down at the same version and stem.",
+      "paired_with": ["D04"],
+      "variants": [
+        {
+          "id": "orphan-down",
+          "profiles": ["sqlx-reversible"],
+          "write": [
+            ["migrations/002_label.down.sql", "inputs/drop-label.sql"]
+          ],
+          "discovery": {
+            "forward": [1],
+            "selected": null,
+            "down": [1, 2],
+            "unpaired": ["migrations/002_label.down.sql"]
+          },
+          "git": null,
+          "outcomes": {
+            "all": {
+              "coverage": "incomplete",
+              "check_exit": 3,
+              "diagnostics": [
+                {
+                  "kind": "unpaired_reversible",
+                  "paths": ["migrations/002_label.down.sql"],
+                  "detail": "Version 2 has only a Down."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mismatched-version",
+          "profiles": ["sqlx-reversible"],
+          "write": [
+            ["migrations/002_label.down.sql", "inputs/drop-label.sql"],
+            ["migrations/003_label.up.sql", "inputs/add-label.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 3],
+            "selected": null,
+            "down": [1, 2],
+            "unpaired": ["migrations/002_label.down.sql", "migrations/003_label.up.sql"]
+          },
+          "git": null,
+          "outcomes": {
+            "all": {
+              "coverage": "incomplete",
+              "check_exit": 3,
+              "diagnostics": [
+                {
+                  "kind": "unpaired_reversible",
+                  "paths": ["migrations/002_label.down.sql", "migrations/003_label.up.sql"],
+                  "detail": "The Down at version 2 and Up at version 3 are both unpaired."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "G01",
+      "description": "Append an additive migration with Git-only evidence.",
+      "paired_with": ["G02", "G03", "G04", "R01", "R02", "S03"],
+      "variants": [
+        {
+          "id": "append",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_label.sql", "inputs/add-label.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "G02",
+      "description": "Non-semantic edits alter the original bytes of the same identity.",
+      "paired_with": ["G01"],
+      "variants": [
+        {
+          "id": "comment-edit",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/001_base.sql", "inputs/base-comment.sql"]
+          ],
+          "discovery": {
+            "forward": [1],
+            "selected": [1]
+          },
+          "git": {
+            "modified": [1]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1
+            }
+          }
+        },
+        {
+          "id": "line-ending-edit",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/001_base.sql", "inputs/base-crlf.sql"]
+          ],
+          "discovery": {
+            "forward": [1],
+            "selected": [1]
+          },
+          "git": {
+            "modified": [1]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "G03",
+      "description": "A removal and a byte-identical move to a new version both remove the old identity.",
+      "paired_with": ["G01"],
+      "variants": [
+        {
+          "id": "delete",
+          "profiles": ["plain", "sqlx-simple"],
+          "baseline_extra": [
+            ["migrations/README.sql", "inputs/ignored.sql"]
+          ],
+          "remove": ["migrations/001_base.sql"],
+          "discovery": {
+            "forward": [],
+            "selected": [],
+            "ignored": ["migrations/README.sql"]
+          },
+          "git": {
+            "missing": [1]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1
+            }
+          }
+        },
+        {
+          "id": "move-to-new-version",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_base.sql", "inputs/base.sql"]
+          ],
+          "baseline_extra": [
+            ["migrations/README.sql", "inputs/ignored.sql"]
+          ],
+          "remove": ["migrations/001_base.sql"],
+          "discovery": {
+            "forward": [2],
+            "selected": [2],
+            "ignored": ["migrations/README.sql"]
+          },
+          "git": {
+            "missing": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "G04",
+      "description": "The trusted base ID identifies a real parent that is unavailable in a shallow clone.",
+      "paired_with": ["G01"],
+      "variants": [
+        {
+          "id": "missing-base-object",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_label.sql", "inputs/add-label.sql"]
+          ],
+          "git_base": "shallow-missing",
+          "discovery": {
+            "forward": [1, 2],
+            "selected": null
+          },
+          "git": null,
+          "outcomes": {
+            "all": {
+              "coverage": "incomplete",
+              "check_exit": 3,
+              "diagnostics": [
+                {
+                  "kind": "missing_git_base",
+                  "paths": [],
+                  "detail": "The trusted base commit is absent locally. The candidate SQL is valid."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "R01",
+      "description": "Destructive statements can remove existing synthetic data.",
+      "paired_with": ["G01", "S02"],
+      "variants": [
+        {
+          "id": "drop-column",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_drop_legacy.sql", "inputs/drop-legacy.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG001",
+                  "severity": "CRITICAL",
+                  "path": "migrations/002_drop_legacy.sql",
+                  "anchor": "DROP COLUMN legacy_code",
+                  "object": "app.accounts.legacy_code",
+                  "basis": "Existing column may contain data."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "truncate",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_truncate.sql", "inputs/truncate-accounts.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG001",
+                  "severity": "CRITICAL",
+                  "path": "migrations/002_truncate.sql",
+                  "anchor": "TRUNCATE app.accounts",
+                  "object": "app.accounts",
+                  "basis": "Existing table may contain data. The baseline has no incoming foreign key."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "description": "Renaming an existing column can break clients that still use the old name.",
+      "paired_with": ["G01"],
+      "variants": [
+        {
+          "id": "rename-column",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_rename_legacy.sql", "inputs/rename-legacy.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG002",
+                  "severity": "HIGH",
+                  "path": "migrations/002_rename_legacy.sql",
+                  "anchor": "RENAME COLUMN legacy_code TO external_code",
+                  "object": "app.accounts.legacy_code",
+                  "basis": "The existing column resolves from the baseline. An old client selecting legacy_code will fail."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "R03a",
+      "description": "Nullable and constant-default adds avoid the predicted rewrite.",
+      "paired_with": ["R03b"],
+      "variants": [
+        {
+          "id": "nullable-add",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_label.sql", "inputs/add-label.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "absent": ["PG003"],
+              "context": "Predict ACCESS EXCLUSIVE on app.accounts."
+            }
+          }
+        },
+        {
+          "id": "constant-default",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_label.sql", "inputs/add-label-default.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "absent": ["PG003"],
+              "context": "Predict ACCESS EXCLUSIVE on app.accounts."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "R03b",
+      "description": "A volatile default likely rewrites an existing heap.",
+      "paired_with": ["R03a"],
+      "variants": [
+        {
+          "id": "volatile-default",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_observed_at.sql", "inputs/add-volatile-default.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG003",
+                  "severity": "HIGH",
+                  "path": "migrations/002_observed_at.sql",
+                  "anchor": "DEFAULT clock_timestamp()",
+                  "object": "app.accounts",
+                  "basis": "Volatile default on an existing table. Predict ACCESS EXCLUSIVE independently of the rewrite."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "R04a",
+      "description": "SET NOT NULL has no retained proof of non-nullness.",
+      "paired_with": ["R04b", "R04c"],
+      "variants": [
+        {
+          "id": "scan",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_set_email_not_null.sql", "inputs/set-email-not-null.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "findings": [
+                {
+                  "rule": "PG004",
+                  "severity": "MEDIUM",
+                  "path": "migrations/002_set_email_not_null.sql",
+                  "anchor": "ALTER COLUMN email SET NOT NULL",
+                  "object": "app.accounts",
+                  "basis": "A scan is likely. Predict ACCESS EXCLUSIVE. Table size is unknown to the offline policy."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "R04b",
+      "description": "A retained, validated CHECK proves that email is non-null.",
+      "paired_with": ["R04a"],
+      "variants": [
+        {
+          "id": "validated-proof",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/003_set_email_not_null.sql", "inputs/set-email-not-null.sql"]
+          ],
+          "baseline_extra": [
+            ["migrations/002_email_check.sql", "inputs/email-check-valid.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2, 3],
+            "selected": [3]
+          },
+          "git": {
+            "unchanged": [1, 2],
+            "new": [3]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "absent": ["PG004"],
+              "context": "The separately committed validated CHECK remains present. Predict ACCESS EXCLUSIVE for SET NOT NULL."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "R04c",
+      "description": "A separate migration validates an existing NOT VALID check.",
+      "paired_with": ["R04a", "R04b"],
+      "variants": [
+        {
+          "id": "validate-check",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/003_validate_email.sql", "inputs/validate-email.sql"]
+          ],
+          "baseline_extra": [
+            ["migrations/002_email_check.sql", "inputs/email-check-not-valid.sql"]
+          ],
+          "seeds": ["clean", "null-email"],
+          "discovery": {
+            "forward": [1, 2, 3],
+            "selected": [3]
+          },
+          "git": {
+            "unchanged": [1, 2],
+            "new": [3]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "findings": [
+                {
+                  "rule": "PG004",
+                  "severity": "MEDIUM",
+                  "path": "migrations/003_validate_email.sql",
+                  "anchor": "VALIDATE CONSTRAINT accounts_email_present",
+                  "object": "app.accounts",
+                  "basis": "Validation scans existing rows. Predict SHARE UPDATE EXCLUSIVE on app.accounts."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "description": "A regular index build can block writes to an existing relation.",
+      "paired_with": ["T02", "R07"],
+      "variants": [
+        {
+          "id": "regular-index",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_index.sql", "inputs/index-legacy.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG005",
+                  "severity": "HIGH",
+                  "path": "migrations/002_index.sql",
+                  "anchor": "CREATE INDEX accounts_legacy_idx",
+                  "object": "app.accounts",
+                  "basis": "Regular build on the existing table. Predict SHARE on app.accounts."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "R06",
+      "description": "The primary-key predicate controls the broad-update trigger.",
+      "variants": [
+        {
+          "id": "all-rows",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_update.sql", "inputs/update-all.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG006",
+                  "severity": "HIGH",
+                  "path": "migrations/002_update.sql",
+                  "anchor": "UPDATE app.accounts SET active = false",
+                  "object": "app.accounts",
+                  "basis": "There is no predicate."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "primary-key",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_update.sql", "inputs/update-by-key.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "absent": ["PG006"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "R07",
+      "description": "The file creates the relation before indexing it in the same transaction.",
+      "paired_with": ["R05"],
+      "variants": [
+        {
+          "id": "new-relation",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_probe.sql", "inputs/create-and-index.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "absent": ["PG005"],
+              "context": "The index is on app.probe, created earlier in this file transaction."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "T01",
+      "description": "A concurrent index build is incompatible with a file wrapper or explicit block.",
+      "paired_with": ["T02"],
+      "variants": [
+        {
+          "id": "file-wrapper",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_index.sql", "inputs/index-concurrently.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG007",
+                  "severity": "HIGH",
+                  "path": "migrations/002_index.sql",
+                  "anchor": "CREATE INDEX CONCURRENTLY",
+                  "object": "app.accounts",
+                  "basis": "The runner wraps the file in a transaction."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "explicit-block",
+          "profiles": ["plain"],
+          "write": [
+            ["migrations/002_index.sql", "inputs/index-concurrently-explicit.sql"]
+          ],
+          "modes": {
+            "plain": "psql-explicit"
+          },
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG007",
+                  "severity": "HIGH",
+                  "path": "migrations/002_index.sql",
+                  "anchor": "CREATE INDEX CONCURRENTLY",
+                  "object": "app.accounts",
+                  "basis": "BEGIN and COMMIT define the transaction under unwrapped psql."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "T02",
+      "description": "A single concurrent index build can run outside a transaction block.",
+      "paired_with": ["T01", "T03", "T04", "R05"],
+      "variants": [
+        {
+          "id": "autocommit",
+          "profiles": ["plain"],
+          "write": [
+            ["migrations/002_index.sql", "inputs/index-concurrently.sql"]
+          ],
+          "modes": {
+            "plain": "psql-autocommit"
+          },
+          "seeds": ["schema-only", "clean"],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "absent": ["PG005", "PG007"]
+            }
+          }
+        },
+        {
+          "id": "simple-opt-out",
+          "profiles": ["sqlx-simple"],
+          "write": [
+            ["migrations/002_index.sql", "inputs/index-concurrently-opt-out.sql"]
+          ],
+          "modes": {
+            "sqlx-simple": "sqlx-opt-out-single"
+          },
+          "forward_statement_count": 1,
+          "seeds": ["schema-only", "clean"],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "absent": ["PG005", "PG007"]
+            }
+          }
+        },
+        {
+          "id": "reversible-opt-out",
+          "profiles": ["sqlx-reversible"],
+          "write": [
+            ["migrations/002_index.up.sql", "inputs/index-concurrently-opt-out.sql"],
+            ["migrations/002_index.down.sql", "inputs/drop-legacy-index.sql"]
+          ],
+          "modes": {
+            "sqlx-reversible": "sqlx-opt-out-single"
+          },
+          "forward_statement_count": 1,
+          "seeds": ["schema-only", "clean"],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2],
+            "down": [1, 2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "absent": ["PG005", "PG007"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "T03",
+      "description": "A leading blank line prevents SQLx from recognizing the opt-out.",
+      "paired_with": ["T02"],
+      "variants": [
+        {
+          "id": "late-directive",
+          "profiles": ["sqlx-simple"],
+          "write": [
+            ["migrations/002_index.sql", "inputs/index-concurrently-late-opt-out.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG007",
+                  "severity": "HIGH",
+                  "path": "migrations/002_index.sql",
+                  "anchor": "CREATE INDEX CONCURRENTLY",
+                  "object": "app.accounts",
+                  "basis": "The directive starts after byte zero, so SQLx wraps the file."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "T04",
+      "description": "SQLx opts out of its wrapper but sends both statements in one simple Query.",
+      "paired_with": ["T02"],
+      "variants": [
+        {
+          "id": "implicit-block",
+          "profiles": ["sqlx-simple"],
+          "write": [
+            ["migrations/002_index.sql", "inputs/index-concurrently-batch.sql"]
+          ],
+          "modes": {
+            "sqlx-simple": "sqlx-opt-out-batch"
+          },
+          "forward_statement_count": 2,
+          "seeds": ["schema-only", "clean"],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG007",
+                  "severity": "HIGH",
+                  "path": "migrations/002_index.sql",
+                  "anchor": "CREATE INDEX CONCURRENTLY",
+                  "object": "app.accounts",
+                  "basis": "PostgreSQL runs the single multi-statement Query in an implicit transaction block."
+                }
+              ],
+              "fallback": {
+                "coverage": "incomplete",
+                "check_exit": 3,
+                "diagnostics": [
+                  {
+                    "kind": "unverified_runner_batching",
+                    "paths": ["migrations/002_index.sql"],
+                    "anchor": "CREATE INDEX CONCURRENTLY",
+                    "detail": "Use this outcome if the adapter cannot establish the multi-statement execution semantics."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "S01",
+      "description": "Preserve the original reversible Up path, multibyte offsets, and dollar-quoted semicolon.",
+      "paired_with": ["D04"],
+      "variants": [
+        {
+          "id": "lf",
+          "profiles": ["sqlx-reversible"],
+          "write": [
+            ["migrations/002_spans.up.sql", "inputs/spans-lf.sql"],
+            ["migrations/002_spans.down.sql", "inputs/spans-down.sql"]
+          ],
+          "modes": {
+            "sqlx-reversible": "sqlx-opt-out-batch"
+          },
+          "forward_statement_count": 2,
+          "source_spans": [
+            {
+              "kind": "second_statement_start",
+              "path": "migrations/002_spans.up.sql",
+              "bytes": [87, 111],
+              "text": "ALTER TABLE app.accounts",
+              "line": 2,
+              "column": 66
+            },
+            {
+              "kind": "drop_subcommand",
+              "path": "migrations/002_spans.up.sql",
+              "bytes": [139, 162],
+              "text": "DROP COLUMN legacy_code",
+              "line": 4,
+              "column": 3
+            }
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2],
+            "down": [1, 2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG001",
+                  "severity": "CRITICAL",
+                  "path": "migrations/002_spans.up.sql",
+                  "anchor": "DROP COLUMN legacy_code",
+                  "object": "app.accounts.legacy_code",
+                  "basis": "Existing column may contain data. Anchor the ALTER subcommand in the original Up bytes."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "crlf",
+          "profiles": ["sqlx-reversible"],
+          "write": [
+            ["migrations/002_spans.up.sql", "inputs/spans-crlf.sql"],
+            ["migrations/002_spans.down.sql", "inputs/spans-down.sql"]
+          ],
+          "modes": {
+            "sqlx-reversible": "sqlx-opt-out-batch"
+          },
+          "forward_statement_count": 2,
+          "source_spans": [
+            {
+              "kind": "second_statement_start",
+              "path": "migrations/002_spans.up.sql",
+              "bytes": [88, 112],
+              "text": "ALTER TABLE app.accounts",
+              "line": 2,
+              "column": 66
+            },
+            {
+              "kind": "drop_subcommand",
+              "path": "migrations/002_spans.up.sql",
+              "bytes": [142, 165],
+              "text": "DROP COLUMN legacy_code",
+              "line": 4,
+              "column": 3
+            }
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2],
+            "down": [1, 2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "complete",
+              "check_exit": 1,
+              "findings": [
+                {
+                  "rule": "PG001",
+                  "severity": "CRITICAL",
+                  "path": "migrations/002_spans.up.sql",
+                  "anchor": "DROP COLUMN legacy_code",
+                  "object": "app.accounts.legacy_code",
+                  "basis": "Existing column may contain data. Anchor the ALTER subcommand in the original Up bytes."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "S02",
+      "description": "A later parse error preserves the earlier destructive finding and takes gate precedence.",
+      "paired_with": ["R01"],
+      "variants": [
+        {
+          "id": "late-parse-error",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_drop_legacy.sql", "inputs/drop-legacy.sql"],
+            ["migrations/003_malformed.sql", "inputs/malformed.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2, 3],
+            "selected": [2, 3]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2, 3]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "incomplete",
+              "check_exit": 3,
+              "findings": [
+                {
+                  "rule": "PG001",
+                  "severity": "CRITICAL",
+                  "path": "migrations/002_drop_legacy.sql",
+                  "anchor": "DROP COLUMN legacy_code",
+                  "object": "app.accounts.legacy_code",
+                  "basis": "Existing column may contain data."
+                }
+              ],
+              "diagnostics": [
+                {
+                  "kind": "parse_error",
+                  "paths": ["migrations/003_malformed.sql"],
+                  "detail": "Retain the original path and the available error position for the unfinished ADD COLUMN."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "S03",
+      "description": "Valid DO syntax contains dynamic DDL outside the offline analysis subset.",
+      "paired_with": ["G01"],
+      "variants": [
+        {
+          "id": "dynamic-ddl",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_dynamic.sql", "inputs/dynamic-do.sql"]
+          ],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "all": {
+              "coverage": "incomplete",
+              "check_exit": 3,
+              "diagnostics": [
+                {
+                  "kind": "unsupported_dynamic_sql",
+                  "paths": ["migrations/002_dynamic.sql"],
+                  "anchor": "$migration$\nBEGIN",
+                  "detail": "Identify the original span of the dollar-quoted DO body."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "V01",
+      "description": "Named NOT NULL with deferred validation.",
+      "variants": [
+        {
+          "id": "same-bytes",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_named_not_null.sql", "inputs/named-not-null.sql"]
+          ],
+          "seeds": ["clean", "null-email"],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "17": {
+              "coverage": "incomplete",
+              "check_exit": 3,
+              "diagnostics": [
+                {
+                  "kind": "target_incompatible",
+                  "paths": ["migrations/002_named_not_null.sql"],
+                  "anchor": "ADD CONSTRAINT accounts_email_nn",
+                  "detail": "PostgreSQL 17 cannot parse this form of ADD CONSTRAINT."
+                }
+              ]
+            },
+            "18": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "absent": ["PG004"],
+              "context": "Deferred validation can leave the existing null in place while enforcing new writes.",
+              "fallback": {
+                "coverage": "incomplete",
+                "check_exit": 3,
+                "diagnostics": [
+                  {
+                    "kind": "unsupported_operation",
+                    "paths": ["migrations/002_named_not_null.sql"],
+                    "anchor": "ADD CONSTRAINT accounts_email_nn",
+                    "detail": "Use this outcome if the initial analyzer excludes the PostgreSQL 18 operation."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "V02",
+      "description": "NOT VALID foreign key on a partitioned referencing table.",
+      "variants": [
+        {
+          "id": "same-bytes",
+          "profiles": ["plain", "sqlx-simple"],
+          "write": [
+            ["migrations/002_partitioned_fk.sql", "inputs/partitioned-fk.sql"]
+          ],
+          "seeds": ["clean", "orphan-event"],
+          "discovery": {
+            "forward": [1, 2],
+            "selected": [2]
+          },
+          "git": {
+            "unchanged": [1],
+            "new": [2]
+          },
+          "outcomes": {
+            "17": {
+              "coverage": "incomplete",
+              "check_exit": 3,
+              "diagnostics": [
+                {
+                  "kind": "target_incompatible",
+                  "paths": ["migrations/002_partitioned_fk.sql"],
+                  "anchor": "ADD CONSTRAINT events_account_fk",
+                  "detail": "PostgreSQL 17 rejects NOT VALID for this partitioned foreign key."
+                }
+              ]
+            },
+            "18": {
+              "coverage": "complete",
+              "check_exit": 0,
+              "absent": ["PG004"],
+              "context": "Predict SHARE ROW EXCLUSIVE on the referencing and referenced tables. Deferred validation leaves the existing orphan in place while enforcing new writes.",
+              "fallback": {
+                "coverage": "incomplete",
+                "check_exit": 3,
+                "diagnostics": [
+                  {
+                    "kind": "unsupported_operation",
+                    "paths": ["migrations/002_partitioned_fk.sql"],
+                    "anchor": "ADD CONSTRAINT events_account_fk",
+                    "detail": "Use this outcome if the initial analyzer excludes the PostgreSQL 18 operation."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
