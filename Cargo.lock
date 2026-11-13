@@ -450,6 +450,7 @@ dependencies = [
 name = "dmg-inspect"
 version = "0.1.0"
 dependencies = [
+ "dmg-core",
  "rustls",
  "thiserror",
  "tokio",
