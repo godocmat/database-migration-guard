@@ -164,7 +164,7 @@ impl DockerWorkerConfig {
         limits: WorkerLimits,
     ) -> Result<Self, WorkerError> {
         let (executable, socket) = (executable.as_ref(), unix_socket.as_ref());
-        if !executable.is_absolute() || !socket.is_absolute() {
+        if !valid_local_path(executable) || !valid_local_path(socket) {
             return Err(WorkerError::InvalidEndpoint);
         }
         Ok(Self {
@@ -181,6 +181,17 @@ impl DockerWorkerConfig {
         self.schemas = Some(schemas);
         self
     }
+}
+
+fn valid_local_path(path: &Path) -> bool {
+    // These are Linux runtime paths even when the plan is reviewed on another OS.
+    let bytes = path.as_os_str().as_encoded_bytes();
+    bytes
+        .strip_prefix(b"/")
+        .is_some_and(|rest| !rest.is_empty() && !rest.starts_with(b"/"))
+        && !bytes
+            .iter()
+            .any(|&byte| byte.is_ascii_control() || matches!(byte, b'\\' | b':'))
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

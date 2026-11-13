@@ -1,6 +1,6 @@
 use std::{
-    ffi::{OsStr, OsString},
-    os::unix::{ffi::OsStrExt, fs::FileTypeExt},
+    ffi::OsString,
+    os::unix::fs::FileTypeExt,
     path::PathBuf,
     process::{ExitStatus, Stdio},
 };
@@ -30,7 +30,6 @@ impl Docker {
                 .socket
                 .metadata()
                 .is_ok_and(|info| info.file_type().is_socket())
-            || config.socket.as_os_str().as_bytes().contains(&0)
         {
             return Err(WorkerError::InvalidEndpoint);
         }
@@ -152,8 +151,4 @@ pub(super) fn valid_container_id(id: &str) -> bool {
         && id
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-pub(super) fn valid_local_path(path: &OsStr) -> bool {
-    !path.as_bytes().iter().any(u8::is_ascii_control)
 }

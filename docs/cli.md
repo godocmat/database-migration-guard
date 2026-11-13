@@ -51,6 +51,8 @@ For worktree integrity evidence, pair `--integrity-manifest FILE` with `--integr
 
 For authorized catalog collection or native history from SQLx, Flyway, Goose, or Supabase, use the explicit inspection workflow. An offline scan or check can import a pinned history artifact for its discovered candidate. [Inspection and saved history](inspect.md)
 
+Run `dmg simulate` on an isolated Linux worker to collect revision-bound rehearsal evidence. Use `--plan-only` to compute the expected binding offline. [Rehearsal configuration and workflow](simulation.md#run-from-the-cli)
+
 ## Policy and process exit
 
 ```toml

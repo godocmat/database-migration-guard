@@ -17,7 +17,7 @@ use crate::{DockerWorkerConfig, PostgresImage, WorkerError, WorkerLimits, Worker
 use controls::{
     ContainerIdentity, ContainerInfo, CreateSettings, ImageInfo, OWNER_LABEL, RUN_AS, RuntimeInfo,
 };
-use docker::{Docker, valid_container_id, valid_local_path};
+use docker::{Docker, valid_container_id};
 
 pub use session::WorkerStream;
 
@@ -31,11 +31,6 @@ pub struct DockerWorker {
 
 impl DockerWorker {
     pub async fn start(config: DockerWorkerConfig) -> Result<Self, WorkerError> {
-        if !valid_local_path(config.executable.as_os_str())
-            || !valid_local_path(config.socket.as_os_str())
-        {
-            return Err(WorkerError::InvalidEndpoint);
-        }
         let deadline = Instant::now() + config.limits.startup;
         let docker = Arc::new(Docker::new(&config)?);
         verify_runtime(&docker, config.image, deadline).await?;

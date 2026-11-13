@@ -6,6 +6,7 @@ mod diff;
 mod inspection;
 mod policy;
 mod render;
+mod simulate;
 
 use std::{
     io::{self, Write},
@@ -79,6 +80,8 @@ enum Command {
     Inspect(inspection::InspectArgs),
     /// Compare saved PostgreSQL schemas and application contracts.
     Diff(diff::DiffArgs),
+    /// Rehearse a reviewed Git revision on a disposable PostgreSQL worker.
+    Simulate(simulate::SimulateArgs),
     /// Render a saved versioned JSON report for review.
     Report {
         /// Saved JSON report.
@@ -241,6 +244,7 @@ fn run(command: Command) -> Result<u8, Failure> {
         }
         Command::Inspect(args) => inspection::run(args),
         Command::Diff(args) => diff::run(args),
+        Command::Simulate(args) => simulate::run(args),
         Command::Report {
             input,
             format,

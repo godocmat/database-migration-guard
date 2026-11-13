@@ -11,9 +11,10 @@ use dmg_core::{
     inspection::TargetId,
     migration::MigrationPlan,
     policy::{
-        BaselineReference, ExpectedRehearsalPlan, FindingBaselineV1, MAX_POLICY_EVIDENCE_BYTES,
-        MAX_POLICY_REHEARSAL_BYTES, PinnedPolicyEvidence, PolicyCandidate, PolicyCheck,
-        PolicyEvaluation, PolicyEvidenceError, PolicyRequirementsError, PolicyV1,
+        BaselineReference, EvidencePolicy, ExpectedRehearsalPlan, FindingBaselineV1,
+        MAX_POLICY_EVIDENCE_BYTES, MAX_POLICY_REHEARSAL_BYTES, PinnedPolicyEvidence,
+        PolicyCandidate, PolicyCheck, PolicyEvaluation, PolicyEvidenceError,
+        PolicyRequirementsError, PolicyV1,
     },
     risk::{Finding, RuleId},
 };
@@ -123,8 +124,12 @@ impl ValidatedPolicy {
         self.digest
     }
 
+    pub(crate) fn evidence_scope(&self) -> Option<&EvidencePolicy> {
+        self.policy.evidence.as_ref()
+    }
+
     pub(crate) fn target_id(&self) -> Option<&TargetId> {
-        self.policy.evidence.as_ref().map(|scope| &scope.target_id)
+        self.evidence_scope().map(|scope| &scope.target_id)
     }
 
     pub(crate) fn evaluate(

@@ -2,6 +2,59 @@
 
 `dmg-simulate` replays the supported SQL in a reviewed Git revision on a fresh, [disposable PostgreSQL worker](research/simulation-worker.md). The protected caller supplies the repository identity, exact Git discovery, reviewed configuration and policy digests, approved PostgreSQL image, scoped schemas and ordered search path. `prepare_rehearsal` checks plan coverage before any Docker call. `run_rehearsal` owns one worker through verified removal.
 
+## Run from the CLI
+
+Run rehearsal in a protected job for one reviewed Git revision. Supply the full local base and candidate commit IDs, trusted project and policy files, and a protected rehearsal configuration. The project supplies the declared PostgreSQL major and exact search path order. The rehearsal config supplies the approved image release and schemas owned by the migration role in the disposable worker. The scope must include every schema in the project search path. Repository and target IDs must match the policy's [evidence scope](policy-evidence.md) when configured.
+
+```toml
+schema_version = 1
+repository_id = "example-repo"
+target_id = "production"
+schemas = ["public"]
+postgres = "18.7"
+
+[setup]
+kind = "schema_only"
+baseline_file = "baseline.sql"
+
+[worker]
+docker_executable = "/usr/bin/docker"
+docker_socket = "/run/dmg/docker.sock"
+
+[worker.timeouts]
+startup_ms = 30000
+operation_ms = 60000
+statement_ms = 10000
+lock_ms = 1000
+cleanup_ms = 10000
+```
+
+Use `postgres = "15.20"`, `"16.16"`, `"17.12"`, or `"18.7"` for the matching major. The selected release fixes both image digests. Preload that exact image into the [isolated Docker Engine](research/simulation-worker.md#images-and-resources). The worker uses explicit absolute Linux paths for the Docker executable and local Unix socket. It checks the executable and socket during provisioning. The displayed timeout values are defaults. The maximums in the same order are 120,000, 300,000, 60,000, 60,000, and 30,000 milliseconds. The minimum is one millisecond.
+
+The rehearsal TOML can be up to 64 KiB. Select `kind = "empty_database"` with no setup files, `kind = "schema_only"` with `baseline_file`, or `kind = "seeded"` with `baseline_file`, `seed_file` and `seed_kind` set to `"synthetic"` or `"sanitized"`. Relative setup paths resolve from the rehearsal TOML's directory. Keep the rehearsal config and setup files under the protected caller's control.
+
+First generate the independently expected binding on a trusted machine. Planning works offline on the CLI's supported platforms and can omit the worker table. Use the output as the `expected_binding` object in the protected policy evidence bundle.
+
+```sh
+dmg simulate --repo . --base "$BASE_SHA" --head "$HEAD_SHA" \
+  --config /protected/dmg.toml --policy /protected/policy.toml \
+  --rehearsal-config /protected/rehearsal.toml --plan-only \
+  --output /protected/expected-binding.json
+```
+
+Run the same reviewed inputs on the disposable Linux x86-64 worker, with the protected worker table populated. Save the full report.
+
+```sh
+dmg simulate --repo . --base "$BASE_SHA" --head "$HEAD_SHA" \
+  --config /protected/dmg.toml --policy /protected/policy.toml \
+  --rehearsal-config /protected/rehearsal.toml \
+  --output /protected/rehearsal.json
+```
+
+On a protected publisher, use the independently generated binding and the SHA-256 of the exact trusted rehearsal report bytes for the bundle's `rehearsal.expected_binding` and `rehearsal.report_sha256`. Hash the saved report without reformatting it. Author and pin the bundle and supply it with the report to `dmg check` using the same revisions, project and policy. [Policy evidence JSON and trusted check](policy-evidence.md#rehearsal)
+
+Without `--output`, JSON goes to stdout. The file output replaces the destination atomically. Exit 0 means the binding was planned or the rehearsal finished successfully. Exit 2 means invalid invocation or configuration and preserves the previous output. Exit 3 means incomplete planning coverage, failed or interrupted execution, or an operational failure. Preflight coverage failures emit version 1 diagnostics with `outcome = "incomplete"` and a `coverage` object. A prepared worker run emits a version 1 rehearsal report with its outcome, including `unsupported_platform` on platforms other than Linux x86-64. Successful SQL rehearsal may include partial catalog observations. Use `require_complete_schema` in the protected policy if the check requires complete schema observations and comparison.
+
 ## Baseline and seeds
 
 | Mode | Setup | Migration selection |
