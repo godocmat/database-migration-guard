@@ -1,5 +1,8 @@
 //! Static DDL risk findings and relation lock predictions.
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::BTreeSet;
 
 use dmg_core::{
