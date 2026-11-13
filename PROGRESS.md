@@ -39,6 +39,12 @@ The reconciliation library at `66c4426` verifies the adapter, target, and forwar
 
 The Rust catalog collector passed six restricted-role TLS scenarios on each of the four PostgreSQL majors. It checked schema visibility, projected table metadata, masked endpoints, limits, permission failures, and contention. Definitions and total relation bytes are opt-in. [Catalog coverage and reproduction](docs/postgresql-catalog.md)
 
+The native history reader passed its three fixture groups on each major over verified TLS. The fixtures cover all four supported history shapes, column-only grants, empty versus unavailable history, bounded contention, and concurrent replacement of the designated table. The Flyway undo record is synthetic. The refactored transport and catalog collector also passed their PostgreSQL 18.7 TLS fixtures on `ad8a76b`. [History reader verification](docs/postgresql-history.md)
+
+## DMG-11 schema diff and application contracts
+
+The core schema comparison distinguishes incomplete coverage from known absence and requires reviewed rename mappings. The application evaluator checks exact deployed dependencies for type, nullability, and structural write regressions. The Windows focused suites passed nine diff cases and eight application-contract cases. Live snapshot comparison through the CLI is pending. [Schema diff](docs/diff.md) · [Application contracts](docs/application-contracts.md)
+
 ## PostgreSQL 15 and 16 target verification
 
 PostgreSQL 15.20 and 16.16 matched the PostgreSQL 17.12 expectations for the supported parser, lock, and runner fixtures. Each older major passed 12 simple-query conformance cases, 41 native psql and SQLx cases, five lock cases, 23 Flyway invocations, 19 Goose cases, and 20 Supabase cases. Both returned `42601` for the PostgreSQL 18 named NOT NULL fixture and `42809` for a NOT VALID foreign key on a partitioned parent. Static CLI targets 15 and 16 use the same pre-18 compatibility checks. [Parser 15.20 evidence](spikes/dmg-01-parser/evidence/server-15.20.jsonl) · [Parser 16.16 evidence](spikes/dmg-01-parser/evidence/server-16.16.jsonl) · [Native observations](fixtures/dmg-02/evidence) · [Adapter observations](fixtures/dmg-09)
