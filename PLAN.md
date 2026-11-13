@@ -310,6 +310,8 @@ DMG-04 is integrated. The discovery library preserves source bytes and ordered i
 
 DMG-05 is integrated. The parser normalizes the supported PostgreSQL 17–18 operations and preserves original source ranges and incomplete coverage. Windows and Linux passed all twelve parser tests, including the LF and CRLF controls, target-version constraint cases, and malformed and unsupported SQL. [Supported SQL and parser limits](docs/postgresql-support.md)
 
+DMG-06 rule implementation is integrated. PG001–PG007 and predicted relation locks passed ten focused tests and the full 130-combination development corpus on Windows and Linux. The frozen independent holdout is ready for scoring against a selected CLI build. [Rules and verification](docs/rules.md)
+
 ## 19. Risk register
 
 | Risk | Likelihood and impact | Owner | Trigger and response |
