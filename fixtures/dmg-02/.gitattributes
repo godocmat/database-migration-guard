@@ -1,0 +1,6 @@
+# Preserve the original migration bytes regardless of core.autocrlf.
+*.sql -text
+*.json text eol=lf
+*.jsonl text eol=lf
+inputs/base-crlf.sql whitespace=trailing-space,space-before-tab,cr-at-eol
+inputs/spans-crlf.sql whitespace=trailing-space,space-before-tab,cr-at-eol
