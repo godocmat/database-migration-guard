@@ -14,13 +14,14 @@ The example uses maintainer-only artifact downloads, seven-day retention, no dep
 
 ## Prepare the pinned image
 
-Use the reviewed dmg binary, its independently recorded SHA-256, and the reviewed repository revision containing [the integration](../integrations/gitlab). Build with a minimal context containing only the binary and the tracked gate script. The [Containerfile](../integrations/gitlab/Containerfile) pins the Linux x86-64 Ubuntu 24.04 SCM base used by the CLI image. It uses Ubuntu-packaged Python 3.12 and Git, verifies the executable at build time, and exposes Python at `/usr/local/bin/python3` for the job templates. The job independently checks the configured binary pin before execution.
+Use the reviewed `dmg` binary, its independently recorded SHA-256 and the reviewed repository revision containing the integration. The build context holds that binary, the gate script and the locked Wolfi Git HTTPS, Bash and Python runtime archives. The image verifies the binary during the build and exposes Python at `/usr/local/bin/python3` for the templates. The job independently checks the configured binary pin before execution. [GitLab Containerfile](../integrations/gitlab/Containerfile) · [Retained inputs and disconnected build](release.md#retain-the-container-build-inputs)
 
 ```sh
 context="$(mktemp -d)"
+python3 -B scripts/stage-container-packages.py gitlab "$context/runtime-packages" --from-dir "$WOLFI_SNAPSHOT"
 install -Dm555 /path/to/verified/dmg "$context/dmg"
 install -Dm444 integrations/gitlab/gate.py "$context/integrations/gitlab/gate.py"
-docker build --platform linux/amd64 \
+docker buildx build --platform linux/amd64 --network none --load \
   --build-arg "DMG_BINARY_SHA256=$DMG_BINARY_SHA256" \
   --file integrations/gitlab/Containerfile \
   --tag dmg-gitlab-review "$context"

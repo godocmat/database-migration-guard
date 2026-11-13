@@ -62,19 +62,20 @@ For an upgrade test, keep the previous verified executable and its exact Git, po
 
 ## Linux x86-64 CLI container
 
-Start with the verified Linux x86-64 executable built on the documented glibc baseline. Use a minimal build context containing only the binary named dmg. The [Containerfile](../integrations/cli/Containerfile) pins the upstream Linux x86-64 Ubuntu 24.04 SCM image containing Git, checks the executable digest and records the reviewed source commit. It runs as UID and GID 65532 by default. This CLI image and the [GitLab job image](gitlab-ci.md#prepare-the-pinned-image) have different entry points.
+Start with the verified Linux x86-64 executable built on the documented glibc baseline. The CLI runs as UID and GID 65532 and records the reviewed executable's source commit in the OCI revision label. Its context holds the binary and the locked Git HTTPS runtime packages. The GitLab job adds Bash, Python and the reviewed gate script. Both recipes use a digest-pinned Chainguard Wolfi base and verify the executable SHA-256, repository signature and locked package archives during the build. [CLI Containerfile](../integrations/cli/Containerfile) · [GitLab job image](gitlab-ci.md#prepare-the-pinned-image)
 
 ~~~sh
 context="$(mktemp -d)"
+python3 -B scripts/stage-container-packages.py cli "$context/runtime-packages" --from-dir "$WOLFI_SNAPSHOT"
 install -m 0555 "$VERIFIED_LINUX_DMG" "$context/dmg"
-docker build --platform linux/amd64 --network none \
+docker buildx build --platform linux/amd64 --network none --load \
   --file integrations/cli/Containerfile \
   --build-arg "DMG_BINARY_SHA256=$DMG_BINARY_SHA256" \
   --build-arg "DMG_SOURCE_COMMIT=$REVIEWED_COMMIT" \
   --tag dmg:review "$context"
 ~~~
 
-Fetch the pinned base before building on a disconnected host. Verify the image's manifest digest, architecture, base, entry point, default user, and executable and inspect its image SBOM. Use the reviewed image by digest after promotion. Smoke test --version and a representative offline check. With a Linux checkout owned by the invoking nonroot user, run the container using that UID and GID so Git recognizes the source owner. Use a read-only checkout mount and send the report to stdout. Use a complete local checkout with its .git directory for this example.
+The builder in this example must be able to resolve the pinned base. For disconnected builds, supply the verified base OCI layout as described below. Verify the final image's manifest digest, architecture, base, entry point, default user, executable and image SBOM. Use the reviewed image by digest after promotion. Smoke test `--version` and a representative offline check. With a Linux checkout owned by the invoking nonroot user, run the container using that UID and GID so Git recognizes the source owner. Use a read-only checkout mount and send the report to stdout. Use a complete local checkout with its `.git` directory for this example.
 
 ~~~sh
 docker run --rm --network none dmg:review --version
@@ -87,6 +88,41 @@ docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev,m
 ~~~
 
 Use trusted policy and config files in the checkout in this example. Mount separate protected inputs when the source checkout is untrusted. Keep worker access separate. Use the native Linux CLI with an explicitly selected isolated Docker worker for rehearsal. [Rehearsal setup](simulation.md#run-from-the-cli)
+
+### Retain the container build inputs
+
+Use the retained snapshot from the release inputs as `WOLFI_SNAPSHOT`. Its `x86_64/` directory holds the exact signed `APKINDEX.tar.gz` and all APK filenames listed in the two locks. For an online acquisition, run the following from the reviewed checkout. The GitLab set includes every archive needed by both images. [Common lock](../integrations/wolfi/cli.sha256) · [GitLab additions](../integrations/wolfi/gitlab-extra.sha256)
+
+~~~sh
+python3 -B scripts/stage-container-packages.py gitlab "$WOLFI_SNAPSHOT"
+~~~
+
+The public Wolfi index rolls forward and older archives eventually expire. A changed index or missing package requires the retained snapshot for this review. When refreshing a pin, verify the new base signature, stage the matching signed index and archives, update both locks and the recipes' lock digests, rebuild both images and rescan them. Retain the new signed inputs with the release evidence. [Wolfi package retention](https://github.com/wolfi-dev/#what-packages-are-included-in-wolfi)
+
+Verify the exact `FROM` image with Cosign before copying it to a local OCI layout. The copy must preserve the upstream digest. [Chainguard signing identity](https://edu.chainguard.dev/open-source/sigstore/policy-controller/policies/using-policy-controller-to-verify-signed-chainguard-images/) · [Skopeo copy](https://github.com/podman-container-tools/skopeo/blob/main/docs/skopeo-copy.1.md)
+
+~~~sh
+wolfi_image=$(awk '$1 == "FROM" {print $2}' integrations/cli/Containerfile)
+cosign verify \
+  --certificate-identity 'https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' "$wolfi_image"
+skopeo copy --preserve-digests "docker://$wolfi_image" "oci:$WOLFI_BASE_LAYOUT:review"
+~~~
+
+On the disconnected Linux build host, use the staged CLI context above with BuildKit and the saved OCI layout. For the GitLab context, use the [GitLab staging example](gitlab-ci.md#prepare-the-pinned-image), set `role=gitlab` and pass the same binary digest. [BuildKit local OCI layouts](https://github.com/moby/buildkit/blob/v0.34.1/docs/reference/buildctl.md#local-sources)
+
+~~~sh
+role=cli
+wolfi_image=$(awk '$1 == "FROM" {print $2}' "integrations/$role/Containerfile")
+buildctl build --frontend dockerfile.v0 \
+  --local "context=$context" --local "dockerfile=integrations/$role" \
+  --oci-layout "wolfi-base=$WOLFI_BASE_LAYOUT" \
+  --opt "context:$wolfi_image=oci-layout://wolfi-base@${wolfi_image##*@}" \
+  --opt filename=Containerfile --opt platform=linux/amd64 --opt force-network-mode=none \
+  --opt "build-arg:DMG_BINARY_SHA256=$DMG_BINARY_SHA256" \
+  --opt "build-arg:DMG_SOURCE_COMMIT=$REVIEWED_COMMIT" \
+  --output "type=oci,dest=dmg-$role.oci.tar"
+~~~
 
 ## Attest and verify approved artifacts
 
