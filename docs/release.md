@@ -30,6 +30,8 @@ On Windows PowerShell, select x86_64-pc-windows-msvc with the MSVC developer env
 
 Save the package.json digest printed by the command through a trusted review channel. The manifest documents a local build. Signed attestations identify the official build workflow. Rebuild with matching OS image, linker, SDK, compiler flags, and pinned inputs, then compare the unsigned executable and SBOM SHA-256 values. Record any mismatch before promotion.
 
+The protected default branch includes manual workflows for native packaging, locked Rust dependencies, and the PostgreSQL rehearsal matrix. A configured GitHub repository is required to dispatch them. [Workflow setup and local verification](research/release-verification-ci.md)
+
 ### SBOM and notices
 
 The native SBOM combines the locked cargo-cyclonedx inventory with packages Cargo compiled during this clean build. Target sources are marked required and host-only build dependencies are marked excluded. The record identifies relevant vendored PostgreSQL parser and cryptographic code and replaces workspace file URIs with stable local component identifiers. Its incomplete composition reflects the scope of a source inventory. Validate it against the CycloneDX 1.5 JSON schema or with a reviewed cyclonedx-cli validate --input-version v1_5 --fail-on-errors invocation. Optimized binary contents, the Rust toolchain and standard library, dynamic system libraries, host Git, and deployment components need separate evidence. [CycloneDX 1.5](https://github.com/CycloneDX/specification/blob/1.5/schema/bom-1.5.schema.json) · [CycloneDX CLI](https://github.com/CycloneDX/cyclonedx-cli#validate-command)
