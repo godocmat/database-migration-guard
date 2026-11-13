@@ -1,8 +1,11 @@
-# Docker Official Python 3.13.18, Debian trixie, linux/amd64 manifest.
-FROM docker.io/library/python:3.13.18-trixie@sha256:bcaf104ef2827b827bdd0b8b351742783fc050296e1dc150113e6ec869e652d0
+# Docker Official Ubuntu Noble SCM base, linux/amd64 manifest.
+FROM docker.io/library/buildpack-deps:noble-scm@sha256:3499ba66ea3258e86ebedc69188f58882e2738357dea0e1583da9838d61e15bd
 ARG DMG_BINARY_SHA256
 COPY --chmod=0444 integrations/gitlab/gate.py /opt/dmg/gate.py
 COPY --chmod=0555 dmg /opt/dmg/dmg
 RUN printf '%s  /opt/dmg/dmg\n' "$DMG_BINARY_SHA256" | sha256sum --check --strict - \
+    && ln -s /usr/bin/python3 /usr/local/bin/python3 \
+    && /usr/local/bin/python3 --version \
+    && /usr/local/bin/python3 -I -c "import tomllib" \
     && git --version \
     && /opt/dmg/dmg --version

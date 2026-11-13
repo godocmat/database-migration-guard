@@ -14,7 +14,7 @@ The example uses maintainer-only artifact downloads, seven-day retention, no dep
 
 ## Prepare the pinned image
 
-Use the reviewed dmg binary, its independently recorded SHA-256, and the reviewed repository revision containing [the integration](../integrations/gitlab). Build with a minimal context containing only the binary and the tracked gate script. The [Containerfile](../integrations/gitlab/Containerfile) pins its upstream Python image and verifies the binary at build time. The job independently checks the configured binary pin before execution.
+Use the reviewed dmg binary, its independently recorded SHA-256, and the reviewed repository revision containing [the integration](../integrations/gitlab). Build with a minimal context containing only the binary and the tracked gate script. The [Containerfile](../integrations/gitlab/Containerfile) pins the Linux x86-64 Ubuntu 24.04 SCM base used by the CLI image. It uses Ubuntu-packaged Python 3.12 and Git, verifies the executable at build time, and exposes Python at `/usr/local/bin/python3` for the job templates. The job independently checks the configured binary pin before execution.
 
 ```sh
 context="$(mktemp -d)"
