@@ -2,13 +2,15 @@
 FROM cgr.dev/chainguard/wolfi-base@sha256:7b01dd2f4364d52e4c9ceaf149eb61e5510a41a3b178f230ef785e9bf26c6c4b
 
 # SHA256SUMS is the staged copy of integrations/wolfi/cli.sha256.
+# Keep the runtime loader cache and discard ldconfig's inode-dependent auxiliary cache.
 RUN --network=none --mount=type=bind,source=runtime-packages,target=/tmp/wolfi-apks \
     cd /tmp/wolfi-apks/x86_64 \
     && printf '%s  SHA256SUMS\n' c367f0c06a49115428fc7fe46349346181e6b1bdeb752bda1a2a99b7e974edee | sha256sum -c - \
     && sha256sum -c SHA256SUMS \
     && packages="$(sed -nE 's/^[0-9a-f]{64}  (.+)-([0-9][0-9A-Za-z._+]*-r[0-9]+)\.apk$/\1=\2/p' SHA256SUMS)" \
     && test -n "$packages" \
-    && apk add --no-network --no-cache --repositories-file /dev/null --repository /tmp/wolfi-apks $packages
+    && apk add --no-network --no-cache --repositories-file /dev/null --repository /tmp/wolfi-apks $packages \
+    && rm -f /var/cache/ldconfig/aux-cache
 
 ARG DMG_BINARY_SHA256
 ARG DMG_SOURCE_COMMIT
