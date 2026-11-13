@@ -317,6 +317,10 @@ DMG-07 is integrated. The CLI implements `init`, `policy validate`, `scan`, and 
 
 DMG-08 local implementation is integrated. The Windows x64 and Ubuntu 24.04 x64 pilot packages from `c4974cd` passed checksum verification, all 130 public CLI cases on each platform, and the local GitHub gate replay. Hosted PR and fork enforcement, HTTPS artifact delivery, and clean install on a disconnected Windows VM remain pending. [GitHub workflow](docs/github-pilot.md) · [Pilot evidence](PROGRESS.md#dmg-08-local-pilot-packages)
 
+DMG-09 has an integrated shared adapter contract and pinned native runner evidence on PostgreSQL 17.12 and 18.7. The public probes verify Flyway OSS 13.12.2, Goose 3.30.1, and Supabase CLI 3.0.0 ordering, transaction boundaries, and partial apply behavior. The shared contract passed workspace tests, Clippy, and the existing discovery and risk corpus on Windows and Linux. Adapter implementation and CLI registration are in progress. [Shared contract](DECISIONS.md#dmg-09-adapter-contracts) · [Flyway evidence](fixtures/dmg-09/flyway/README.md) · [Goose evidence](fixtures/dmg-09/goose/README.md) · [Supabase evidence](fixtures/dmg-09/supabase/README.md)
+
+DMG-10 feasibility is recorded for PostgreSQL 15.20, 16.16, 17.12, and 18.7. A restricted role collected scoped raw catalog metadata without application table grants. Under contention, raw reads completed while some definition and physical-size reads reached their lock deadline. The PostgreSQL 18 libpq TLS probe checked CA and hostname validation. The Rust inspector and native history reconciliation remain implementation work. [Catalog scope and transport evidence](docs/research/postgresql-inspection.md)
+
 ## 19. Risk register
 
 | Risk | Likelihood and impact | Owner | Trigger and response |
