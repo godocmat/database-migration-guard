@@ -278,6 +278,7 @@ dependencies = [
  "dmg-core",
  "dmg-discovery",
  "dmg-postgres",
+ "dmg-report",
  "dmg-rules",
  "serde",
  "serde_json",
@@ -318,6 +319,13 @@ dependencies = [
  "dmg-discovery",
  "pg_query",
  "tempfile",
+]
+
+[[package]]
+name = "dmg-report"
+version = "0.1.0"
+dependencies = [
+ "dmg-core",
 ]
 
 [[package]]
