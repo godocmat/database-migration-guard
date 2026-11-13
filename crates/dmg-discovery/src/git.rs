@@ -178,7 +178,7 @@ fn collect_file(
     batch: &mut Batch,
     inventory: &mut Inventory,
 ) {
-    if entry.kind == EntryKind::Tree {
+    if entry.kind == EntryKind::Tree && !matches!(options.adapter, crate::Adapter::Flyway(_)) {
         return;
     }
     let Some(filename) = std::str::from_utf8(entry.path)
@@ -203,6 +203,18 @@ fn collect_file(
         ));
         return;
     };
+    if entry.kind == EntryKind::Tree {
+        crate::flyway::check_child_root(inventory, options, &path);
+        return;
+    }
+    if entry.kind == EntryKind::Symlink && matches!(options.adapter, crate::Adapter::Flyway(_)) {
+        inventory.gaps.push(coverage_gap(
+            CoverageGapKind::InvalidPath,
+            Some(&path),
+            "Flyway migration locations cannot include symbolic links",
+        ));
+        return;
+    }
     if entry.kind == EntryKind::Submodule {
         inventory.gaps.push(coverage_gap(
             CoverageGapKind::UnsupportedInput,

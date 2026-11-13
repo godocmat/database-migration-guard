@@ -393,6 +393,46 @@ layout = "simple"
 }
 
 #[test]
+fn flyway_resolves_versions_repeatables_and_transaction_settings() {
+    let project = Fixture::new();
+    fs::remove_file(project.path("migrations/001_create.sql")).unwrap();
+    project.write(
+        "migrations/V01_02__base.SQL",
+        "CREATE TABLE public.items (id integer);\n",
+    );
+    project.write(
+        "migrations/V1.10__index.sql",
+        "CREATE INDEX CONCURRENTLY items_idx ON public.items (id);\n",
+    );
+    project.write("migrations/R__a_check.sql", "SELECT 1;\n");
+    project.write("dmg.toml", native_config("flyway", ""));
+    assert_exit(&project.check(), 3);
+
+    project.write(
+        "dmg.toml",
+        native_config("flyway", "transactional_lock = false\n"),
+    );
+    let checked = project.check();
+    assert_exit(&checked, 0);
+    let report = report(&checked);
+    let files = report["migrations"]["inventory"].as_array().unwrap();
+    assert_eq!(files.len(), 3);
+    assert_eq!(
+        files[0]["identity"]["version"],
+        json!({"kind": "flyway", "value": "1.2"})
+    );
+    assert_eq!(files[0]["execution"]["transaction_wrapper"], "file");
+    assert_eq!(files[1]["execution"]["transaction_wrapper"], "none");
+    assert_eq!(
+        files[2]["identity"]["version"],
+        json!({"kind": "repeatable", "value": "a check"})
+    );
+
+    project.write("dmg.toml", native_config("flyway", "group = true\n"));
+    assert_exit(&project.check(), 2);
+}
+
+#[test]
 fn supabase_keeps_lexical_versions_and_preserves_native_batch_boundaries() {
     let project = Fixture::new();
     fs::remove_file(project.path("migrations/001_create.sql")).unwrap();

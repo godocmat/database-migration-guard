@@ -100,7 +100,12 @@ fn timeline(
 
     let delivery = migration.execution.statement_delivery;
     let uncertain_at = first_missing_statement(migration);
-    if uncertain_connection || delivery != StatementDelivery::PerStatement && uncertain_at.is_some()
+    if uncertain_connection
+        || matches!(
+            migration.execution.transaction_wrapper,
+            TransactionWrapper::Flyway(_)
+        )
+        || delivery != StatementDelivery::PerStatement && uncertain_at.is_some()
     {
         // Missing source may change a batch's boundaries and statement count.
         state.invalidate();
@@ -364,5 +369,45 @@ fn transaction_gap(statement: &Statement, message: &str) -> CoverageGap {
         kind: CoverageGapKind::UnresolvedTransactionMode,
         message: message.into(),
         related_paths: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use dmg_core::{
+        digest::ContentDigest,
+        migration::{
+            ExecutionMode, FlywaySettings, MigrationDirection, MigrationFile, MigrationIdentity,
+        },
+        source::{ByteRange, RepoPath},
+        target::PostgresTarget,
+    };
+    use dmg_postgres::parse_migration;
+
+    use super::*;
+
+    #[test]
+    fn unresolved_flyway_wrapper_keeps_supported_statements_in_unknown_context() {
+        let bytes = b"ALTER TABLE app.items ADD COLUMN tag text;\nVACUUM app.items;\n";
+        let file = MigrationFile {
+            identity: MigrationIdentity::flyway_version("1").unwrap(),
+            direction: MigrationDirection::Forward,
+            path: RepoPath::new("sql/V1__fixture.sql").unwrap(),
+            digest: ContentDigest::of(bytes),
+            source_segments: vec![ByteRange::new(0, bytes.len()).unwrap()],
+            execution: ExecutionMode {
+                transaction_wrapper: TransactionWrapper::Flyway(FlywaySettings::default()),
+                statement_delivery: StatementDelivery::PerStatement,
+            },
+        };
+        let migration = parse_migration(&file, bytes, PostgresTarget::V18);
+        let (timeline, _) = timeline(&migration, false);
+        assert!(!timeline.steps.is_empty());
+        assert!(
+            timeline
+                .steps
+                .iter()
+                .all(|step| step.context == TransactionContext::Unknown)
+        );
     }
 }

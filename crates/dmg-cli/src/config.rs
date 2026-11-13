@@ -7,8 +7,8 @@ use std::{
 
 use dmg_core::{source::RepoPath, target::PostgresTarget};
 use dmg_discovery::{
-    Adapter, DiscoveryLimits, DiscoveryOptions, PlainSql, PlainTransaction, SqlxLayout,
-    VersionOrder,
+    Adapter, DiscoveryLimits, DiscoveryOptions, FlywaySettings, PlainSql, PlainTransaction,
+    SqlxLayout, VersionOrder,
 };
 use dmg_rules::RuleOptions;
 use serde::Deserialize;
@@ -39,6 +39,14 @@ enum AdapterFile {
     },
     Sqlx {
         layout: SqlxLayoutFile,
+    },
+    Flyway {
+        #[serde(default = "default_enabled")]
+        execute_in_transaction: bool,
+        #[serde(default)]
+        mixed: bool,
+        #[serde(default = "default_enabled")]
+        transactional_lock: bool,
     },
     Supabase,
 }
@@ -143,6 +151,15 @@ impl Project {
                 SqlxLayoutFile::Simple => SqlxLayout::Simple,
                 SqlxLayoutFile::Reversible => SqlxLayout::Reversible,
             }),
+            AdapterFile::Flyway {
+                execute_in_transaction,
+                mixed,
+                transactional_lock,
+            } => Adapter::Flyway(FlywaySettings {
+                execute_in_transaction,
+                mixed,
+                transactional_lock,
+            }),
             AdapterFile::Supabase => Adapter::Supabase,
         };
         Ok(Self {
@@ -158,6 +175,10 @@ impl Project {
 
 fn default_search_path() -> Vec<String> {
     RuleOptions::default().search_path
+}
+
+fn default_enabled() -> bool {
+    true
 }
 
 pub(crate) fn template(target: PostgresTarget) -> String {

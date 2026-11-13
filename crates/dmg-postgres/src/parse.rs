@@ -5,6 +5,7 @@ use dmg_core::{
     digest::ContentDigest,
     migration::{
         MigrationAdapter, MigrationDirection, MigrationFile, MigrationPlan, StatementDelivery,
+        TransactionWrapper,
     },
     source::{ByteRange, RepoPath, SourceMap, SourceSpan},
     target::PostgresTarget,
@@ -144,6 +145,8 @@ fn parse_file(
     }
     if file.identity.adapter == MigrationAdapter::Supabase {
         crate::supabase::resolve_execution(&mut parsed, text, &mut gaps);
+    } else if let TransactionWrapper::Flyway(settings) = file.execution.transaction_wrapper {
+        crate::flyway::apply_execution(settings, text, &mut parsed, &mut gaps);
     }
     let syntax_complete = gaps.is_empty();
     versions.check(target, &parsed, &mut gaps, syntax_complete);
