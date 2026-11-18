@@ -18,7 +18,7 @@ Start with [the plain SQL configuration and policy](../../examples/github) under
 | `ALTER TABLE public.demo ADD COLUMN note text;` | Exit 0, complete coverage, and a merge permitted once other requirements pass. |
 | `ALTER TABLE public.demo ADD COLUMN;` | Exit 3, incomplete coverage, and a blocked merge. |
 
-In the denied revision, add comments to the candidate config and policy so their hashes differ from the protected inputs. Restore those files before the passing revision. Repeat the passing case after a reviewed target update and capture the new test merge. Compare each job's `binary_sha256`, `config_sha256`, `policy_sha256`, `check_exit`, `gate_exit` and `report_sha256` with the pinned executable, protected Git blobs, expected exits and downloaded report. Keep the request and job links, source and target SHAs, checked merge SHA and ordered parents, active protection settings, and JSON, Markdown and provenance artifacts. For the protected input digests, hash the blobs from the exact recorded base SHA with `git cat-file blob "$BASE_COMMIT:.dmg/dmg.toml" | shasum -a 256` and the equivalent command for `policy.toml`.
+In the denied revision, add comments to the candidate config and policy so their hashes differ from the protected inputs. Restore those files before the passing revision. Repeat the passing case after a reviewed target update and capture the new test merge. Use the offline verifier below for each run. Keep the request and job links, source and target SHAs, checked merge SHA and ordered parents, active protection settings, and JSON, Markdown and provenance artifacts.
 
 ## GitHub protected pull requests
 
@@ -43,6 +43,23 @@ In the denied revision, add comments to the candidate config and policy so their
 2. Enable merged-results pipelines and **Pipelines must succeed**. Keep **Skipped pipelines are considered successful** off. Use **Merge commit with semi-linear history** with automatic rebase disabled for this pilot. The source then has to include the current target before merging, and the gate can check the refreshed two-parent result. Disable merge trains for the tested branch. Set `ci_allow_fork_pipelines_to_run_in_parent_project` to false via the project settings API. Use a fresh fork pipeline to check this setting because prior pipelines can retain their original context. [Merged-results setup](https://docs.gitlab.com/ci/pipelines/merged_results_pipelines/#enable-merged-results-pipelines) · [Merge methods](https://docs.gitlab.com/user/project/merge_requests/methods/) · [GitLab merge checks](https://docs.gitlab.com/user/project/merge_requests/auto_merge/#require-a-successful-pipeline-for-merge) · [Fork pipeline setting](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/#prevent-pipelines-from-fork-projects)
 3. Run the cases in a same-project MR. Confirm the selected pipeline is a merged result, the protected policy job replaces the fallback, and `base_commit`, `source_commit` and `scan_commit` match the target, source and internal merge. In the denied revision, change the fallback job's message to a unique test marker and confirm that the protected policy's job and pins still apply. After the target moves, verify that the old passing pipeline cannot qualify the MR and that the updated branch triggers a new merged result. Check that failed and incomplete jobs retain artifacts and downloads follow `artifacts.access: maintainer`. [GitLab artifact access](https://docs.gitlab.com/ci/jobs/job_artifacts/#control-who-can-download-artifacts)
 4. Run [the fork advisory example](../../examples/gitlab/fork-advisory.yml) from the source fork. Verify a detached pipeline with fork project identity, the expected diff base and source commit, and a report without a policy decision. Confirm the parent-project run is unavailable. Separately record the fork MR's merge state after the advisory passes. GitLab creates the pipeline from fork-owned configuration, and **Pipelines must succeed** checks merge request pipeline status. Require contributors' changes to enter through a reviewed same-project branch unless a trusted status check verifies the exact revision and blocks direct fork merges. [GitLab fork pipeline selection](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/#use-with-forked-projects) · [GitLab fork profile](../gitlab-ci.md#forks)
+
+## Verify retained pilot artifacts
+
+For each run, record the exact commits from the provider's request and job before another push refreshes the merge ref. Fetch and retain the Git commit objects locally, including both parents for a protected run. Keep the approved binary SHA-256 and the expected case from your reviewed setup and test matrix. Download artifacts from the selected job and extract them into a fresh directory.
+
+Run the offline verifier from the Guard checkout with Python 3.11 or later and Git. `DMG_PILOT_REPO` is the local repository containing the retained commits, and `DMG_ARTIFACTS` is the directory containing `report.json` and `provenance.json` from that job.
+
+```sh
+python3 -B scripts/verify-hosted-gate.py github \
+  --repo "$DMG_PILOT_REPO" --artifacts "$DMG_ARTIFACTS" \
+  --base "$DMG_BASE" --source "$DMG_SOURCE" --scan "$DMG_SCAN" \
+  --binary-sha256 "$DMG_BINARY_SHA256" --expect denied
+```
+
+Use `gitlab` for the protected merged-results pipeline. The protected variants read the config and policy blobs from the pinned target commit and require the target and source parents in that order. Use `gitlab-fork` for the fork advisory, set `--base` to its diff base, and supply the source commit for both `--source` and `--scan`. Use `--expect pass` for a complete advisory scan, which reads the config from the source commit and omits a policy decision. The verifier uses the documented pilot paths by default. Override them with `--config`, `--policy` for a protected check, or `--migration`.
+
+The verifier checks the binary pin recorded by the job, the protected input and report hashes, the migration's inventory digest, and the report's Git basis, decision and coverage. A denial must include PG001 on the pilot migration. An incomplete report must include a parse error on that migration. Separately compare the provenance's repository or project and request or pipeline IDs with the provider records. Use the provider's settings, job logs, and observed merge state to verify enforcement, and check report presentation and artifact access in the provider. The JSON consistency check cannot establish those hosted results.
 
 ## Native macOS arm64
 
