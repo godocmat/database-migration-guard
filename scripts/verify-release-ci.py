@@ -77,9 +77,12 @@ def install_generator(target, work):
     archive = work / f"cargo-cyclonedx-{target}.{suffix}"
     digest = GENERATOR_DIGESTS[target]
     fetch_pinned(f"https://github.com/{PRODUCER}/releases/download/{GENERATOR_TAG}/{archive.name}", archive, digest)
-    response = json.loads(fetch(f"https://api.github.com/repos/{PRODUCER}/attestations/sha256:{digest}"))
-    bundle = work / "generator-attestation.jsonl"
-    bundle.write_text("".join(json.dumps(item["bundle"]) + "\n" for item in response["attestations"]), encoding="utf-8")
+    # Use a reviewed public bundle when the hosted runner shares an anonymous API quota.
+    bundle = ROOT / "scripts" / "attestations" / f"{GENERATOR_TAG}-{target}.jsonl"
+    if not bundle.is_file():
+        response = json.loads(fetch(f"https://api.github.com/repos/{PRODUCER}/attestations/sha256:{digest}"))
+        bundle = work / "generator-attestation.jsonl"
+        bundle.write_text("".join(json.dumps(item["bundle"]) + "\n" for item in response["attestations"]), encoding="utf-8")
     run("gh", "attestation", "verify", archive, "--bundle", bundle, "--repo", PRODUCER,
         "--signer-workflow", f"{PRODUCER}/.github/workflows/release.yml", "--signer-digest", GENERATOR_COMMIT,
         "--source-ref", f"refs/tags/{GENERATOR_TAG}", "--source-digest", GENERATOR_COMMIT, "--deny-self-hosted-runners")
