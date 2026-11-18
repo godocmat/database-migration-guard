@@ -142,6 +142,26 @@ def checked_result(serial):
     return None
 
 
+def show_boot_diagnostic(scratch, qmp_path):
+    screen = scratch / "screen.ppm"
+    try:
+        qmp(qmp_path, "screendump", {"filename": str(screen)})
+        output = subprocess.run(
+            ["tesseract", str(screen), "stdout", "--psm", "11"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            check=True, text=True, timeout=10,
+        ).stdout
+        normalized = " ".join(output.lower().split())
+        markers = (
+            "uefi interactive shell", "press any key", "installing windows server",
+            "windows setup", "setup failed", "windows cannot", "getting ready",
+            "administrator", "login", "restart", "something went wrong",
+        )
+        print("Guest screen markers:", [item for item in markers if item in normalized], flush=True)
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
+        print("Guest boot diagnostic unavailable:", type(error).__name__, flush=True)
+
+
 def run(scratch):
     answer = build_media(scratch)
     disk = scratch / "fresh-system.qcow2"
@@ -150,7 +170,7 @@ def run(scratch):
     serial = scratch / "serial.log"
     console = scratch / "qemu.log"
     shutil.copyfile("/usr/share/OVMF/OVMF_VARS_4M.fd", vars_path)
-    subprocess.run(["qemu-img", "create", "-f", "qcow2", str(disk), "40G"], check=True)
+    subprocess.run(["qemu-img", "create", "-f", "qcow2", str(disk), "72G"], check=True)
     cmd = [
         "qemu-system-x86_64", "-machine", "q35", "-accel", "kvm", "-cpu", "host",
         "-smp", "4", "-m", "6144", "-nic", "none", "-no-user-config", "-nodefaults",
@@ -159,19 +179,19 @@ def run(scratch):
         "-drive", "file=/usr/share/OVMF/OVMF_CODE_4M.fd,if=pflash,format=raw,unit=0,readonly=on",
         "-drive", f"file={vars_path},if=pflash,format=raw,unit=1",
         "-drive", f"file={disk},if=none,id=system,format=qcow2",
-        "-device", "ide-hd,bus=ide.0,drive=system,bootindex=1",
+        "-device", "ide-hd,bus=ide.0,drive=system,bootindex=2",
         "-drive", f"file={scratch / 'evaluation.iso'},if=none,id=installer,format=raw,media=cdrom,readonly=on",
-        "-device", "ide-cd,bus=ide.1,drive=installer,bootindex=2",
+        "-device", "ide-cd,bus=ide.1,drive=installer,bootindex=1",
         "-drive", f"file={answer},if=none,id=answer,format=raw,media=cdrom,readonly=on",
         "-device", "ide-cd,bus=ide.2,drive=answer",
     ]
-    print("Starting q35 UEFI guest with KVM, an empty 40 GiB disk, and -nic none", flush=True)
+    print("Starting q35 UEFI guest with KVM, an empty sparse 72 GiB disk, and -nic none", flush=True)
     with console.open("wb") as output:
         guest = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=output, stderr=output)
         start = time.monotonic()
-        key_times = iter((3, 6, 10, 14, 20, 28))
+        key_times = iter(range(1, 16))
         next_key = next(key_times, None)
-        next_update = 60
+        next_update = 30
         try:
             while (elapsed := time.monotonic() - start) < 1500:
                 if checked_result(serial):
@@ -180,14 +200,18 @@ def run(scratch):
                     raise RuntimeError(f"QEMU exited before the guest result ({guest.returncode})")
                 if next_key is not None and elapsed >= next_key:
                     if qmp_path.exists():
-                        qmp(qmp_path, "human-monitor-command", {"command-line": "sendkey ret"})
+                        qmp(qmp_path, "human-monitor-command", {"command-line": "sendkey spc"})
                     next_key = next(key_times, None)
                 if elapsed >= next_update:
-                    print(f"Windows installation in progress ({int(elapsed)} seconds)", flush=True)
-                    next_update += 60
-                time.sleep(2)
+                    allocated = disk.stat().st_blocks * 512
+                    print(f"Guest wait {int(elapsed)}s. Disk allocated {allocated} bytes.", flush=True)
+                    if elapsed >= 240 and allocated < 32 * 1024 * 1024:
+                        raise RuntimeError("Windows Setup did not start writing to the guest disk")
+                    next_update += 30
+                time.sleep(1)
             raise TimeoutError("Windows Setup did not emit an installed guest result in 25 minutes")
         except Exception:
+            show_boot_diagnostic(scratch, qmp_path)
             print(console.read_text(errors="replace")[-4000:], flush=True)
             if serial.exists():
                 print(serial.read_text(errors="replace")[-2000:], flush=True)

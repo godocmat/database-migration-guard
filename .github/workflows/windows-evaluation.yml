@@ -27,13 +27,13 @@ jobs:
           set -euo pipefail
           test "$(uname -m)" = x86_64
           free_bytes=$(df -B1 --output=avail "$RUNNER_TEMP" | tail -n 1)
-          if (( free_bytes < 32000000000 )); then
-            echo "::error::At least 32 GB of runner scratch storage is required"
+          if (( free_bytes < 36000000000 )); then
+            echo "::error::At least 36 GB of runner scratch storage is required"
             exit 1
           fi
           sudo -n test -c /dev/kvm
           sudo -n apt-get update -qq
-          sudo -n apt-get install -y --no-install-recommends acl ovmf qemu-system-x86 qemu-utils xorriso
+          sudo -n apt-get install -y --no-install-recommends acl ovmf qemu-system-x86 qemu-utils tesseract-ocr tesseract-ocr-eng xorriso
           sudo -n setfacl -m "u:$(id -un):rw" /dev/kvm
           qemu-system-x86_64 --version
           mkdir -m 700 "$RUNNER_TEMP/windows-evaluation"
