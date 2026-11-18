@@ -1,0 +1,101 @@
+name: Platform acceptance probe
+
+on:
+  push:
+    branches:
+      - codex/platform-acceptance-probe
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu-guest-host:
+    name: Ubuntu guest host
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Inspect storage and virtualization
+        shell: bash
+        run: |
+          set -euo pipefail
+          uname -sm
+          df -hT "$RUNNER_TEMP" /mnt /tmp
+          df -B1 --output=target,avail "$RUNNER_TEMP" /mnt
+          free -h
+          lscpu | grep -Ei 'architecture|cpu\(s\)|model name|virtualization'
+          if sudo -n test -c /dev/kvm; then
+            ls -l /dev/kvm
+            sudo -n python3 - <<'PY'
+          import fcntl
+          with open("/dev/kvm", "rb") as device:
+              print("KVM API version:", fcntl.ioctl(device, 0xAE00, 0))
+          PY
+          else
+            echo "KVM device unavailable"
+          fi
+
+  windows-runner:
+    name: Windows hosted system
+    runs-on: windows-2025
+    timeout-minutes: 5
+    steps:
+      - name: Identify the system and Hyper-V feature
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture | Format-List
+          Get-CimInstance Win32_ComputerSystem | Select-Object HypervisorPresent, TotalPhysicalMemory | Format-List
+          Get-CimInstance Win32_Processor | Select-Object Name, VirtualizationFirmwareEnabled, SecondLevelAddressTranslationExtensions | Format-List
+          Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' |
+            Select-Object EditionID, InstallationType | Format-List
+          if (Get-Command Get-WindowsFeature -ErrorAction SilentlyContinue) {
+            Get-WindowsFeature -Name Hyper-V | Format-List Name, InstallState
+          }
+
+  macos-arm64:
+    name: macOS arm64 process isolation
+    runs-on: macos-15
+    timeout-minutes: 5
+    steps:
+      - name: Verify native architecture and a blocked loopback connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          uname -sm
+          sw_vers
+          python3 - <<'PY'
+          import socket
+          import subprocess
+          import sys
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+
+          with socket.socket() as listener, TemporaryDirectory() as scratch:
+              listener.bind(("127.0.0.1", 0))
+              listener.listen()
+              address = listener.getsockname()
+              with socket.create_connection(address, timeout=1):
+                  server, _ = listener.accept()
+                  server.close()
+              print("Loopback connection succeeds outside the sandbox", flush=True)
+
+              profile = Path(scratch) / "offline.sb"
+              profile.write_text("(version 1)\n(allow default)\n(deny network*)\n")
+              probe = """\
+          import errno
+          import socket
+          import sys
+          try:
+              with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=2):
+                  raise SystemExit("Sandbox unexpectedly allowed a loopback connection")
+          except OSError as error:
+              if error.errno not in {errno.EACCES, errno.EPERM}:
+                  raise
+              print("Sandbox denied loopback connection:", error)
+          """
+              subprocess.run(["/usr/bin/sandbox-exec", "-f", str(profile),
+                              sys.executable, "-c", probe, str(address[1])],
+                             check=True, timeout=10)
+          PY
