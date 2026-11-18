@@ -1,14 +1,60 @@
 # Database Migration Guard
 
-Database Migration Guard reviews PostgreSQL migration changes before deployment. Its offline CLI checks documented plain SQL, SQLx, Flyway, Goose, and Supabase profiles for PostgreSQL 15–18. It compares exact Git revisions, reports risks and coverage, and applies trusted policy and evidence.
+Database Migration Guard reviews PostgreSQL migrations before deployment. The `dmg` CLI finds risks such as table drops, likely rewrites, and blocking index builds. It can compare exact Git commits and apply a policy to the findings, migration history, and analysis coverage. Local `scan` and `check` run offline.
 
-The CLI can also collect scoped read-only PostgreSQL evidence over TLS, compare schemas and application contracts, plan or run disposable Linux x86-64 rehearsals, and render saved results. GitHub and GitLab examples show how to run checks with protected inputs. [CLI quickstart](docs/cli.md) · [Supported SQL](docs/postgresql-support.md) · [GitHub](docs/github-pilot.md) · [GitLab](docs/gitlab-ci.md)
+Guard supports PostgreSQL 15–18 and documented plain SQL, SQLx, Flyway, Goose, and Supabase migration profiles. It marks analysis incomplete when it encounters unsupported SQL or lacks required evidence. [Supported SQL](docs/postgresql-support.md) · [Migration formats](docs/migration-formats.md) · [Risk rules](docs/rules.md)
 
-Install the [native parser prerequisites](CONTRIBUTING.md#native-postgresql-parser) before building from source.
+The project is free to use, modify, and redistribute under the [MIT License](LICENSE).
+
+## Build from source
+
+Install Git, rustup, and the native compiler and libclang for your platform. Rustup selects the pinned Rust toolchain, and Cargo downloads the locked dependencies on the first build. [Linux, Windows, and macOS build prerequisites](CONTRIBUTING.md#native-postgresql-parser)
 
 ~~~sh
+git clone https://github.com/godocmat/database-migration-guard.git
+cd database-migration-guard
 cargo build --locked --release -p dmg-cli
-cargo test --locked --workspace
 ~~~
 
-This project is in local release preparation. See the [implementation plan](PLAN.md), [verification status](PROGRESS.md), and [release guide](docs/release.md) for the remaining platform, hosted CI, and distribution checks.
+The executable is `target/release/dmg` on Linux and macOS or `target/release/dmg.exe` on Windows. Prebuilt binaries and container images are pending release approval. [Release status](docs/release.md#acceptance-matrix)
+
+## Try an offline check
+
+Run the example from the Guard checkout after building. It creates a temporary directory, writes a sample migration, and checks it against the default policy. Use your own PostgreSQL major and configure the migration roots and runner profile when adopting Guard in a project.
+
+On Linux or macOS:
+
+~~~sh
+dmg="$(pwd)/target/release/dmg"
+cd "$(mktemp -d)"
+"$dmg" init --target 18
+mkdir migrations
+printf '%s\n' 'CREATE TABLE public.accounts (id bigint PRIMARY KEY);' > migrations/001_create_accounts.sql
+printf '%s\n' 'schema_version = 1' > policy.toml
+"$dmg" check --policy policy.toml --format json --output report.json
+~~~
+
+In Windows PowerShell:
+
+~~~powershell
+$dmg = (Resolve-Path 'target/release/dmg.exe').Path
+$demo = Join-Path ([IO.Path]::GetTempPath()) "dmg-demo-$([guid]::NewGuid())"
+New-Item -ItemType Directory -Path $demo | Out-Null
+Set-Location -LiteralPath $demo
+& $dmg init --target 18
+New-Item -ItemType Directory -Path migrations | Out-Null
+'CREATE TABLE public.accounts (id bigint PRIMARY KEY);' | Set-Content -Encoding ascii migrations/001_create_accounts.sql
+'schema_version = 1' | Set-Content -Encoding ascii policy.toml
+& $dmg check --policy policy.toml --format json --output report.json
+~~~
+
+The example returns exit `0` and writes a `pass` decision to `report.json`. Checks can also return `1` for a policy denial, `2` for invalid input, or `3` for incomplete coverage or an operational failure. For revision checks, supply full commit IDs with `--base` and `--head` and load configuration and policy from a trusted source. [CLI reference](docs/cli.md)
+
+## Further workflows
+
+- Collect scoped catalog and migration history evidence over verified TLS, or compare saved schemas and application contracts. [Inspection](docs/inspect.md) · [Schema diffs](docs/diff.md)
+- Plan a rehearsal offline or run it in a disposable PostgreSQL worker on Linux x86-64. [Rehearsal](docs/simulation.md)
+- Render saved reports as Markdown, HTML, SARIF, GitHub annotations, or GitLab Code Quality. [Report formats](docs/report-formats.md)
+- Adapt the GitHub and GitLab CI examples to your repository. Protected merge enforcement requires provider-specific settings and live pilot verification. [GitHub](docs/github-pilot.md) · [GitLab](docs/gitlab-ci.md)
+
+Run `cargo test --locked --workspace` from the Guard checkout. [Contributing and verification](CONTRIBUTING.md)
