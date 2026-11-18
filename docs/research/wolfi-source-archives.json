@@ -1,0 +1,283 @@
+{
+  "version": 1,
+  "imageManifests": {
+    "cli": "sha256:2f1057e80106f41c3d8842f19c38786b003761c50c429f452057d22b3c5d3ce5",
+    "gitlab": "sha256:087492119ce01ebb8ad4ca1a773475975fe283f7d927f8aee57bf1db1166985f"
+  },
+  "archives": [
+    {
+      "source": "apk-tools",
+      "url": "https://gitlab.alpinelinux.org/alpine/apk-tools/-/archive/179aba9f22c2e22d45b21bd68e9478fe06d8896a/apk-tools-179aba9f22c2e22d45b21bd68e9478fe06d8896a.tar.gz",
+      "sha256": "ef5a25fc81ebc821005850f3e6e320e3235538484202ca7eeebf35285012feef",
+      "gitRevision": "179aba9f22c2e22d45b21bd68e9478fe06d8896a",
+      "unavailableSpdxUrl": "https://tarballs.cgr.dev/a/30f50847291d6711d36ff8c57d76ddd27b0e5c6aa3579e2c270c40018c1297b4-179aba9f22c2e22d45b21bd68e9478fe06d8896a.tar.gz"
+    },
+    {
+      "source": "bash",
+      "url": "https://tarballs.cgr.dev/g/0e7c34c3027d7f6da5723ac0c18a27c10a29ce56d560c36969b71020e9407623-b8c60bc9ca365f8261fa97900b6fa939f6ebc303.tar.gz",
+      "sha256": "9482e3019bf05ce8092956459f8f048b51db5a99b2d1b32ef466740ac19776f4",
+      "gitRevision": "b8c60bc9ca365f8261fa97900b6fa939f6ebc303"
+    },
+    {
+      "source": "brotli",
+      "url": "https://codeload.github.com/google/brotli/tar.gz/db24a98aed38a16de78cc05ca15cdd8dc2a0d92d",
+      "sha256": "113b9685dfc14dd2f3360d077283266eec2fbdfb0fe3e5600f11be151da0d68e",
+      "gitRevision": "db24a98aed38a16de78cc05ca15cdd8dc2a0d92d"
+    },
+    {
+      "source": "busybox",
+      "url": "https://codeload.github.com/vda-linux/busybox_mirror/tar.gz/fc71374dfccd46448c62947269a35f1420d7ee28",
+      "sha256": "d07129e55810dbf6cd3378c29192e9f0af277ad097f40634b7b809d298aba638",
+      "gitRevision": "fc71374dfccd46448c62947269a35f1420d7ee28"
+    },
+    {
+      "source": "bzip2",
+      "url": "https://tarballs.cgr.dev/g/bd9e4cde2b52db644da8ff7b19a2e89df1ff408230201c86e08456c98ef2fc12-6a8690fc8d26c815e798c588f796eabe9d684cf0.tar.gz",
+      "sha256": "15621c3ab5f630c249f84a611af62a8765199afe5e56a5899f237abd8ed9cf48",
+      "gitRevision": "6a8690fc8d26c815e798c588f796eabe9d684cf0"
+    },
+    {
+      "source": "ca-certificates",
+      "url": "https://tarballs.cgr.dev/a/f7f6555663adc30d4e3c43a90ddef6942dabe93d06f7a7201cf29d993222346a-2058424fda70ee478bcce872dcf141a0c5499ee0.tar.gz",
+      "sha256": "e3870e37e184ec67da6c2288cdc7129eda637e633135405d7e670fadf6cd9739",
+      "gitRevision": "2058424fda70ee478bcce872dcf141a0c5499ee0"
+    },
+    {
+      "source": "curl",
+      "url": "https://codeload.github.com/curl/curl/tar.gz/3163ec065643ba20709f190111f42c3e1fe95273",
+      "sha256": "9dc0b74994d293d99dd57ec46193b8c9017298b8bc2481d026ef5a2b5edeb759",
+      "gitRevision": "3163ec065643ba20709f190111f42c3e1fe95273"
+    },
+    {
+      "source": "cyrus-sasl-heimdal",
+      "url": "https://codeload.github.com/cyrusimap/cyrus-sasl/tar.gz/7a6b45b177070198fed0682bea5fa87c18abb084",
+      "sha256": "5ca0cb386426ca644918947c54bbe6aacc2962bc38019d8a6befc454c0e174b8",
+      "gitRevision": "7a6b45b177070198fed0682bea5fa87c18abb084"
+    },
+    {
+      "source": "e2fsprogs",
+      "url": "https://codeload.github.com/tytso/e2fsprogs/tar.gz/7ee1d505ef3b37831215f490411f346fe57e9053",
+      "sha256": "b29a35af359c2e1122cb298206cb64673e222a2028d1087a9b02fd4df04e4786",
+      "gitRevision": "7ee1d505ef3b37831215f490411f346fe57e9053"
+    },
+    {
+      "source": "expat",
+      "url": "https://codeload.github.com/libexpat/libexpat/tar.gz/a70841d9ffa64ddde29ab824ed6305035ebe4c47",
+      "sha256": "165b3fe7561caf01adef27b68587d6579166060b04e3e88561ec788f4be0e893",
+      "gitRevision": "a70841d9ffa64ddde29ab824ed6305035ebe4c47"
+    },
+    {
+      "source": "gcc",
+      "url": "https://tarballs.cgr.dev/g/dc3e72361e36d33e861a0662815d63a4f1b8578521cc6935343a4aa87327bdec-78d4ac73dd391005b895a6148cd9831e28e1208b.tar.gz",
+      "sha256": "ae0f30c47b74b1354f959d5315eea1b15488a213484b1c8926b3e08f869e635b",
+      "gitRevision": "78d4ac73dd391005b895a6148cd9831e28e1208b"
+    },
+    {
+      "source": "gdbm",
+      "url": "https://tarballs.cgr.dev/g/42740bd9e1a78209c3c68f439ab4397c34f0ed77c165a024d710bdd48e76d1df-8ca8f03ab6cc125139a395ec2d522aebb15f8060.tar.gz",
+      "sha256": "6ea87ca2b9a1e2d134abea9de169a9e23bc1444cae6503db65813a04732bf1fe",
+      "gitRevision": "8ca8f03ab6cc125139a395ec2d522aebb15f8060"
+    },
+    {
+      "source": "git",
+      "url": "https://tarballs.cgr.dev/p/13d95d86c3cf193d4f0417e059a08cc793fc772f803086b07d168643a0b50f40-03b41523c576f26ad34085378717a0c1b287470f.tar.gz",
+      "sha256": "34fa712fc05a30c519e898488048388744a6949da8123b74a5461ce03f2c184f",
+      "gitRevision": "03b41523c576f26ad34085378717a0c1b287470f"
+    },
+    {
+      "source": "glibc-2.44",
+      "url": "https://tarballs.cgr.dev/g/9390037ac2ec26cf74ce7c6709d852e0ce67205355e04fbdb9b9549f47a5bb40-48fa38b9218add3a1e5c38c349a3e481a5fcf245.tar.gz",
+      "sha256": "786ac452a2f67f7d80e9a2aa4b3b74c34e10fbb2ce7555251f28e80d9c866669",
+      "gitRevision": "48fa38b9218add3a1e5c38c349a3e481a5fcf245"
+    },
+    {
+      "source": "heimdal",
+      "url": "https://codeload.github.com/heimdal/heimdal/tar.gz/a6cf94577c0d1e5bca5304342e4ddffb18255afe",
+      "sha256": "2af5a2f1beb52ab23867cc1e253dbe6743b50f728736cccb1ab4b250de6634a5",
+      "gitRevision": "a6cf94577c0d1e5bca5304342e4ddffb18255afe"
+    },
+    {
+      "source": "keyutils",
+      "url": "https://tarballs.cgr.dev/p/c4263df0120f9cbea0297c9b6574d5bafd566f98b9cec2e39be1c0e378836781-cb3bb194cca88211cbfcdde2f10c0f43c3fb8ec3.tar.gz",
+      "sha256": "826e838b41a2adacb119cdf19734af69cdedd4e93c50498aa845898fa729515d",
+      "gitRevision": "cb3bb194cca88211cbfcdde2f10c0f43c3fb8ec3"
+    },
+    {
+      "source": "krb5",
+      "url": "https://codeload.github.com/krb5/krb5/tar.gz/8570e77819563e036027e1da789d08ec9333ed4d",
+      "sha256": "27517e59d2759d61222a7321bcd18b92feb04fecc313750cb9075e9a9f1705dd",
+      "gitRevision": "8570e77819563e036027e1da789d08ec9333ed4d"
+    },
+    {
+      "source": "libffi",
+      "url": "https://codeload.github.com/libffi/libffi/tar.gz/12ffd1f9dc56fcea79d2f742f424301ae668d663",
+      "sha256": "d85f2289e43838c44114bb00a5adc7fd4b524028e78384861f542769bb41b000",
+      "gitRevision": "12ffd1f9dc56fcea79d2f742f424301ae668d663"
+    },
+    {
+      "source": "libidn2",
+      "url": "https://tarballs.cgr.dev/l/647ec517d7d5a099d6182bc708cd871327e049f96c961ab62ae2acea4398bf29-9bc3ac79e2ae81ade245a0e308bf13c981efaa83.tar.gz",
+      "sha256": "c1628c59a164d1a3d55ca44bf10a3e2a9bf06988bcb1d2d35fa8f4cd1d4cdc7e",
+      "gitRevision": "9bc3ac79e2ae81ade245a0e308bf13c981efaa83"
+    },
+    {
+      "source": "libpsl",
+      "url": "https://codeload.github.com/rockdaboot/libpsl/tar.gz/c486db8d221cbac55f87508d4da4db4497760997",
+      "sha256": "f2c9996cc73ced61136ed0b9f657e77821d21822e56b93bf5d7b727c440affa8",
+      "gitRevision": "c486db8d221cbac55f87508d4da4db4497760997"
+    },
+    {
+      "source": "libunistring",
+      "url": "https://tarballs.cgr.dev/g/8647b56477282eff9978402011260dd5cf99ea235db78088a35a84c76d6356c8-9a0b11a515258048ba17f05009cbd317298de92d.tar.gz",
+      "sha256": "5a85794d015c2fd605cae6548e209150ba26386855318ad61f0f7ff71e4b7aff",
+      "gitRevision": "9a0b11a515258048ba17f05009cbd317298de92d"
+    },
+    {
+      "source": "libverto",
+      "url": "https://codeload.github.com/latchset/libverto/tar.gz/1e8f574f702f270d96e42348e7cc088da5acc9ae",
+      "sha256": "a19e7b829fb4e5a97792afd3fbe065a8899d8428a6626a9ab094a3ae9488f6c2",
+      "gitRevision": "1e8f574f702f270d96e42348e7cc088da5acc9ae"
+    },
+    {
+      "source": "libxcrypt",
+      "url": "https://codeload.github.com/besser82/libxcrypt/tar.gz/db70b42bd7b2a5b00a8580c8dec0aa66791c950a",
+      "sha256": "0a54d0e1c9e3c573f009d77bb7b5b9f2884000a4b72b19473058c5d8c80b8fa5",
+      "gitRevision": "db70b42bd7b2a5b00a8580c8dec0aa66791c950a"
+    },
+    {
+      "source": "lmdb",
+      "url": "https://codeload.github.com/LMDB/lmdb/tar.gz/69087ced3cb6082f7dcfb4fc2dcaa3b68a7e2e8c",
+      "sha256": "6e44748b3da117721bedcb379f3dcaedb3683a8a06be9539e8a62b3852a4b977",
+      "gitRevision": "69087ced3cb6082f7dcfb4fc2dcaa3b68a7e2e8c"
+    },
+    {
+      "source": "mpdecimal",
+      "url": "https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-4.0.1.tar.gz",
+      "sha256": "96d33abb4bb0070c7be0fed4246cd38416188325f820468214471938545b1ac8"
+    },
+    {
+      "source": "ncurses",
+      "url": "https://codeload.github.com/ThomasDickey/ncurses-snapshots/tar.gz/7404b376832583182c52722dc09d86b8675db375",
+      "sha256": "25994d33686beb39391e8303c9dfe6c8b8549b12f19a1b80a9609b9cc4c6b76e",
+      "gitRevision": "7404b376832583182c52722dc09d86b8675db375"
+    },
+    {
+      "source": "nghttp2",
+      "url": "https://codeload.github.com/nghttp2/nghttp2/tar.gz/80dcb8140af050fac91a7e6af4fc6dd013404bd1",
+      "sha256": "9af1a23010509f5d8218643336ea3ee1aaf9f2ad26d1fe352af72e3fe17d6de2",
+      "gitRevision": "80dcb8140af050fac91a7e6af4fc6dd013404bd1"
+    },
+    {
+      "source": "nghttp3",
+      "url": "https://codeload.github.com/ngtcp2/nghttp3/tar.gz/dc83309ca5fd2beb91cc5c030a2d30525e9f2a00",
+      "sha256": "50becbabdc40312fbe1096d74d83748f0e81883f5274fa8cfe5230fbb2220b1c",
+      "gitRevision": "dc83309ca5fd2beb91cc5c030a2d30525e9f2a00"
+    },
+    {
+      "source": "ngtcp2",
+      "url": "https://codeload.github.com/ngtcp2/ngtcp2/tar.gz/6a22a4d7a111f6b52391910e40ad3681a09cfb9c",
+      "sha256": "1c8ee9b7261a2d0c906949fb9a8119615bd920a50d12c59106310b9d1245a821",
+      "gitRevision": "6a22a4d7a111f6b52391910e40ad3681a09cfb9c"
+    },
+    {
+      "source": "openldap-2.7",
+      "url": "https://codeload.github.com/openldap/openldap/tar.gz/5030280ed039f03fe7725a21f892d7f4e0b98076",
+      "sha256": "7ea5fa2720cd116769571435ed570c956469256652735bc5337e928c4662b5ef",
+      "gitRevision": "5030280ed039f03fe7725a21f892d7f4e0b98076"
+    },
+    {
+      "source": "openssl-4.0",
+      "url": "https://codeload.github.com/openssl/openssl/tar.gz/af1775b60dfa141a4ad762585052cabeb9f37e9e",
+      "sha256": "219c0a389f3c76e58f2d9e2b216101887f94747e669bb79c43225d7b6ac1253a",
+      "gitRevision": "af1775b60dfa141a4ad762585052cabeb9f37e9e"
+    },
+    {
+      "source": "openssl-provider-legacy-allowed",
+      "url": "https://codeload.github.com/openssl/openssl/tar.gz/2f4e3a5fec05394068cfa7379890ab552483a8a6",
+      "sha256": "3eb00d3dbf2b3393dcf1cb82127a3d19ed911cec4e8315fe2ca20f3038b5ddde",
+      "gitRevision": "2f4e3a5fec05394068cfa7379890ab552483a8a6"
+    },
+    {
+      "source": "pcre2",
+      "url": "https://codeload.github.com/PCRE2Project/pcre2/tar.gz/6f9d7c1373262c541324a16a358785b33ef116cf",
+      "sha256": "d2be545b3f16571d37a81795d0e528007e882b9d95335d6e9344a1574a9ef431",
+      "gitRevision": "6f9d7c1373262c541324a16a358785b33ef116cf"
+    },
+    {
+      "source": "py3-pip/msgpack-python",
+      "url": "https://codeload.github.com/msgpack/msgpack-python/tar.gz/742cb6d7ad141343edcccc829b5b06d0c6f8fcb5",
+      "sha256": "3e187fd124168b01087268744b1d16a2fd7be62a5ce13e88594bd59b08cdab0d",
+      "gitRevision": "742cb6d7ad141343edcccc829b5b06d0c6f8fcb5"
+    },
+    {
+      "source": "py3-pip/pip",
+      "url": "https://codeload.github.com/pypa/pip/tar.gz/b3b696fe2122f2339d782517559bfade2cb6b879",
+      "sha256": "5202e6f34650ed74b8cfc74a4808af45a46ebd994b187e160a92d426e1bb3e0f",
+      "gitRevision": "b3b696fe2122f2339d782517559bfade2cb6b879"
+    },
+    {
+      "source": "py3-pip/python-certifi",
+      "url": "https://codeload.github.com/certifi/python-certifi/tar.gz/b60466c9f2882d9cf088943c650b0faac06c080c",
+      "sha256": "c53452dfac043982f6931db924de8d68d17356a5b218a88bd448e3dbaa234420",
+      "gitRevision": "b60466c9f2882d9cf088943c650b0faac06c080c"
+    },
+    {
+      "source": "py3-pip/urllib3",
+      "url": "https://codeload.github.com/urllib3/urllib3/tar.gz/b1d30ab61fe0db8f11092805e8c5ac43e091064a",
+      "sha256": "7b756993769b87a827c962433a7d3ecdd7d79378bc71a2a83b7725f9f66b8c12",
+      "gitRevision": "b1d30ab61fe0db8f11092805e8c5ac43e091064a"
+    },
+    {
+      "source": "python-3.15",
+      "url": "https://codeload.github.com/python/cpython/tar.gz/64b5cfdf7548a21741398ce0826728818327aea7",
+      "sha256": "a2f88ac2713220e1de291bb0cb6db4903d05946813b908ac70408e596c07898c",
+      "gitRevision": "64b5cfdf7548a21741398ce0826728818327aea7"
+    },
+    {
+      "source": "readline",
+      "url": "https://tarballs.cgr.dev/g/ca1544b7a4361c29393002e6b6d7b40cf760179801b69a5c375d2d2ed53e109a-447b8290b3e2e2d117dc8e9cdb83b0dc6448a638.tar.gz",
+      "sha256": "737e781b0e6c3ac001e5e71703aff8347114e00b7e595b3e8dc6be22189ba13c",
+      "gitRevision": "447b8290b3e2e2d117dc8e9cdb83b0dc6448a638"
+    },
+    {
+      "source": "sqlite",
+      "url": "https://www.sqlite.org/2026/sqlite-src-3540100.zip",
+      "sha256": "387e7f6cad4797b17848c07d453dc6606917bb356a6cfe5a3abafd38c240c71b"
+    },
+    {
+      "source": "util-linux",
+      "url": "https://codeload.github.com/util-linux/util-linux/tar.gz/d76cbf8f13e65ff657344f7f6a90042cf755ba59",
+      "sha256": "29708436c29e1dd21531f6e3ceb76adff42cc0b71e015db164e04d50ac2499cc",
+      "gitRevision": "d76cbf8f13e65ff657344f7f6a90042cf755ba59"
+    },
+    {
+      "source": "xz",
+      "url": "https://codeload.github.com/tukaani-project/xz/tar.gz/d3e650e63c110e830fd5391e7f8b45df0b91d3da",
+      "sha256": "b5aad5c776b324a39a46bbd588d4b5c001266b87ed3887aea1dc2854702d041c",
+      "gitRevision": "d3e650e63c110e830fd5391e7f8b45df0b91d3da"
+    },
+    {
+      "source": "zlib",
+      "url": "https://codeload.github.com/madler/zlib/tar.gz/767c4c947852e143f582c85f14cf573411df1b35",
+      "sha256": "cafa75b907cd067b471fba32a2772c010a859086241ef70d3d57eda6aeea3a64",
+      "gitRevision": "767c4c947852e143f582c85f14cf573411df1b35"
+    },
+    {
+      "source": "zstd",
+      "url": "https://codeload.github.com/facebook/zstd/tar.gz/f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+      "sha256": "4b0bd1f0cfb25e61b9103c35f27395530ff5b4c0d2513a00fd745849e85ea52c",
+      "gitRevision": "f8745da6ff1ad1e7bab384bd1f9d742439278e99"
+    }
+  ],
+  "nestedSourceArchives": [
+    {
+      "source": "libpsl/publicsuffix-list",
+      "url": "https://codeload.github.com/publicsuffix/list/tar.gz/e1b8015c3b2f0f4f8c18659c2480fc1a22c07b20",
+      "gitRevision": "e1b8015c3b2f0f4f8c18659c2480fc1a22c07b20",
+      "sha256": "8e8e3324565a15dc1705cffae420d4aeb6f0af9afcaae490691138b1d748905d",
+      "embeddedDatasetSha1": "ecd73e513368ee32a1d0c8b3efac6c838fa02540",
+      "datasetSha256": "fe6adc7fb8014f57d28d69b18d0aa3e581efb432544922e12131a5d4a87bd954",
+      "licenseSha256": "66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172"
+    }
+  ]
+}
