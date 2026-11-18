@@ -1,0 +1,125 @@
+name: Verify a clean macOS arm64 installation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DMG_TARGET: aarch64-apple-darwin
+  DMG_PILOT_COMMIT: c4974cd11180440d710c0843a952caa11ce786e3
+
+jobs:
+  package:
+    if: ${{ github.ref_protected && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    name: Stage candidate and rollback
+    runs-on: macos-15
+    timeout-minutes: 60
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      archive_sha256: ${{ steps.stage.outputs.archive_sha256 }}
+      manifest_sha256: ${{ steps.stage.outputs.manifest_sha256 }}
+      rollback_sha256: ${{ steps.stage.outputs.rollback_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14.10'
+      - name: Install pinned SBOM validation dependencies
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r scripts/release-ci-requirements.txt
+      - name: Build and verify native inputs
+        id: stage
+        shell: bash
+        run: |
+          test "$(uname -m)" = arm64
+          llvm=$(brew --prefix llvm@18)
+          export LIBCLANG_PATH="$llvm/lib"
+          export CLANG_PATH="$llvm/bin/clang"
+          test -f "$LIBCLANG_PATH/libclang.dylib"
+          sw_vers
+          "$CLANG_PATH" --version
+          xcrun clang --version
+          xcrun --show-sdk-version
+
+          inputs="$RUNNER_TEMP/dmg-macos-inputs"
+          mkdir "$inputs"
+          archive="$inputs/dmg-native.tar.gz"
+          python -B scripts/verify-release-ci.py "$DMG_TARGET" "$GITHUB_SHA" "$archive"
+
+          pilot="$RUNNER_TEMP/dmg-macos-pilot-source"
+          pilot_target="$RUNNER_TEMP/dmg-macos-pilot-target"
+          pilot_package="$RUNNER_TEMP/dmg-macos-pilot-package"
+          git worktree add --detach "$pilot" "$DMG_PILOT_COMMIT"
+          test "$(git -C "$pilot" rev-parse HEAD)" = "$DMG_PILOT_COMMIT"
+          (
+            cd "$pilot"
+            export CARGO_TARGET_DIR="$pilot_target"
+            cargo fetch --locked --target "$DMG_TARGET"
+            DOCS_RS=1 cargo build --locked --offline --release --target "$DMG_TARGET" -p dmg-cli
+          )
+          python -B scripts/stage-pilot.py --source "$pilot" --target "$DMG_TARGET" \
+            --binary "$pilot_target/$DMG_TARGET/release/dmg" --output "$pilot_package"
+          install -m 0755 "$pilot_package/dmg-0.1.0-$DMG_TARGET" "$inputs/dmg-rollback"
+
+          archive_sha256=$(shasum -a 256 "$archive" | cut -d ' ' -f 1)
+          manifest_sha256=$(tar -xOf "$archive" package.json | shasum -a 256 | cut -d ' ' -f 1)
+          rollback_sha256=$(shasum -a 256 "$inputs/dmg-rollback" | cut -d ' ' -f 1)
+          {
+            printf 'archive_sha256=%s\n' "$archive_sha256"
+            printf 'manifest_sha256=%s\n' "$manifest_sha256"
+            printf 'rollback_sha256=%s\n' "$rollback_sha256"
+          } | tee -a "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: upload
+        with:
+          name: dmg-macos-install-inputs-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dmg-macos-inputs/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  install:
+    name: Install, upgrade and roll back with networking denied
+    needs: package
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14.10'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.package.outputs.artifact_id }}
+          path: ${{ runner.temp }}/dmg-macos-inputs/
+          merge-multiple: true
+      - name: Replay the verified installation
+        id: replay
+        shell: bash
+        env:
+          DMG_ARCHIVE_SHA256: ${{ needs.package.outputs.archive_sha256 }}
+          DMG_MANIFEST_SHA256: ${{ needs.package.outputs.manifest_sha256 }}
+          DMG_ROLLBACK_SHA256: ${{ needs.package.outputs.rollback_sha256 }}
+        run: |
+          inputs="$RUNNER_TEMP/dmg-macos-inputs"
+          python -B scripts/verify-macos-upgrade.py \
+            --archive "$inputs/dmg-native.tar.gz" --archive-sha256 "$DMG_ARCHIVE_SHA256" \
+            --manifest-sha256 "$DMG_MANIFEST_SHA256" --source-commit "$GITHUB_SHA" \
+            --previous "$inputs/dmg-rollback" --previous-sha256 "$DMG_ROLLBACK_SHA256" \
+            --scratch "$RUNNER_TEMP" 2>&1 | tee "$RUNNER_TEMP/dmg-macos-install.log"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && steps.replay.outcome != 'skipped' }}
+        with:
+          name: dmg-macos-install-log-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dmg-macos-install.log
+          if-no-files-found: error
+          retention-days: 14
