@@ -1,0 +1,45 @@
+name: Windows Server evaluation guest
+
+on:
+  push:
+    branches:
+      - codex/platform-acceptance-probe
+    paths:
+      - .github/workflows/windows-evaluation.yml
+      - windows-evaluation/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluation-guest:
+    name: Install and verify Windows Server 2025 Evaluation without a NIC
+    runs-on: ubuntu-24.04
+    timeout-minutes: 46
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare KVM and the pinned Microsoft evaluation media
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          free_bytes=$(df -B1 --output=avail "$RUNNER_TEMP" | tail -n 1)
+          if (( free_bytes < 32000000000 )); then
+            echo "::error::At least 32 GB of runner scratch storage is required"
+            exit 1
+          fi
+          sudo -n test -c /dev/kvm
+          sudo -n apt-get update -qq
+          sudo -n apt-get install -y --no-install-recommends acl ovmf qemu-system-x86 qemu-utils xorriso
+          sudo -n setfacl -m "u:$(id -un):rw" /dev/kvm
+          qemu-system-x86_64 --version
+          mkdir -m 700 "$RUNNER_TEMP/windows-evaluation"
+          timeout 750s python3 -B windows-evaluation/download-media.py "$RUNNER_TEMP/windows-evaluation"
+      - name: Install fresh guest and verify its offline result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B windows-evaluation/run-guest.py "$RUNNER_TEMP/windows-evaluation"

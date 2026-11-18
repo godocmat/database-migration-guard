@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - codex/platform-acceptance-probe
+    paths:
+      - .github/workflows/platform-acceptance-probe.yml
   workflow_dispatch:
 
 permissions:
