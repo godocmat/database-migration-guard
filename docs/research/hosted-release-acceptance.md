@@ -1,6 +1,6 @@
 # Hosted and macOS release acceptance
 
-Use disposable pilot repositories with synthetic migrations. A public platform probe used the standalone `codex/platform-acceptance-probe` branch in the designated GitHub repository. The free `ubuntu-24.04` job confirmed KVM and enough disk for an evaluation VM. The `windows-2025` job identified the stock Windows Server 2025 Datacenter runner. The `macos-15` job ran on Apple silicon and verified that Seatbelt denied a live loopback connection after the unsandboxed connection succeeded. The platform probe used synthetic inputs. Hosted Guard enforcement and the macOS package check remain pending. [Platform probe run](https://github.com/godocmat/database-migration-guard/actions/runs/44388580961)
+Use disposable pilot repositories with synthetic migrations. A public platform probe used the standalone `codex/platform-acceptance-probe` branch in the designated GitHub repository. Standard GitHub runners confirmed the Apple silicon Seatbelt control, the stock Windows Datacenter runner, and an isolated Windows Server 2025 Evaluation Core installation under KVM. These hosted platform checks used synthetic inputs. Hosted Guard enforcement and the macOS package check remain pending. [GitHub platform evidence](github-platform-probe.md)
 
 | Check | Inputs the release owner needs to supply |
 | --- | --- |
