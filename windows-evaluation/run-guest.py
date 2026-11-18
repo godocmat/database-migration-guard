@@ -60,7 +60,7 @@ def answer_file():
     <component name="Microsoft-Windows-Deployment" {COMPONENT}>
       <RunSynchronous><RunSynchronousCommand wcm:action="add">
         <Order>1</Order>
-        <Path>cmd.exe /d /c for %D in ({letters}) do @if exist %D:\EVAL-MEDIA.TAG (md C:\Windows\Setup\Scripts 2&gt;nul &amp; copy /Y %D:\SetupComplete.cmd C:\Windows\Setup\Scripts\SetupComplete.cmd &amp; copy /Y %D:\guest-check.ps1 C:\Windows\Setup\Scripts\guest-check.ps1)</Path>
+        <Path>cmd.exe /d /c for %D in ({letters}) do @if exist %D:\EVAL-MEDIA.TAG call %D:\STAGE.CMD</Path>
       </RunSynchronousCommand></RunSynchronous>
     </component>
   </settings>
@@ -81,6 +81,13 @@ def build_media(scratch):
     ET.fromstring(xml_bytes)
     (staged / "Autounattend.xml").write_bytes(xml_bytes)
     (staged / "EVAL-MEDIA.TAG").write_text("Disposable Windows evaluation probe\n", encoding="ascii")
+    (staged / "STAGE.CMD").write_bytes(
+        b"@echo off\r\n"
+        b'if not exist "%SystemRoot%\\Setup\\Scripts" mkdir "%SystemRoot%\\Setup\\Scripts"\r\n'
+        b'copy /Y "%~dp0SetupComplete.cmd" "%SystemRoot%\\Setup\\Scripts\\SetupComplete.cmd" >nul || exit /b 1\r\n'
+        b'copy /Y "%~dp0guest-check.ps1" "%SystemRoot%\\Setup\\Scripts\\guest-check.ps1" >nul || exit /b 1\r\n'
+        b"exit /b 0\r\n"
+    )
     (staged / "SetupComplete.cmd").write_bytes(
         b"@echo off\r\n"
         b'"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" '
@@ -156,10 +163,14 @@ def show_boot_diagnostic(scratch, qmp_path):
             "uefi interactive shell", "press any key", "installing windows server",
             "windows setup", "setup failed", "windows cannot", "getting ready",
             "administrator", "login", "restart", "something went wrong",
+            "could not parse", "could not apply", "could not complete",
         )
-        print("Guest screen markers:", [item for item in markers if item in normalized], flush=True)
+        matched = {marker for marker in markers if marker in normalized}
+        print("Guest screen markers:", sorted(matched), flush=True)
+        return matched
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
         print("Guest boot diagnostic unavailable:", type(error).__name__, flush=True)
+        return set()
 
 
 def run(scratch):
@@ -192,6 +203,7 @@ def run(scratch):
         key_times = iter(range(1, 16))
         next_key = next(key_times, None)
         next_update = 30
+        next_screen_check = 240
         try:
             while (elapsed := time.monotonic() - start) < 1500:
                 if checked_result(serial):
@@ -208,6 +220,11 @@ def run(scratch):
                     if elapsed >= 240 and allocated < 32 * 1024 * 1024:
                         raise RuntimeError("Windows Setup did not start writing to the guest disk")
                     next_update += 30
+                if elapsed >= next_screen_check:
+                    screen = show_boot_diagnostic(scratch, qmp_path)
+                    if screen & {"could not parse", "could not apply", "could not complete", "setup failed"}:
+                        raise RuntimeError("Windows Setup displayed an error")
+                    next_screen_check += 120
                 time.sleep(1)
             raise TimeoutError("Windows Setup did not emit an installed guest result in 25 minutes")
         except Exception:
