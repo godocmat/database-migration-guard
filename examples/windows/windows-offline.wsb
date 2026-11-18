@@ -1,0 +1,19 @@
+<Configuration>
+  <vGPU>Disable</vGPU>
+  <Networking>Disable</Networking>
+  <AudioInput>Disable</AudioInput>
+  <VideoInput>Disable</VideoInput>
+  <ClipboardRedirection>Disable</ClipboardRedirection>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>C:\dmg-windows-test\inputs</HostFolder>
+      <SandboxFolder>C:\dmg-windows-inputs</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>C:\dmg-windows-test\evidence</HostFolder>
+      <SandboxFolder>C:\dmg-windows-evidence</SandboxFolder>
+      <ReadOnly>false</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+</Configuration>

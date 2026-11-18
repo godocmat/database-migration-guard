@@ -2,6 +2,20 @@
 
 The Windows package still needs an install, upgrade, and rollback on an authorized clean Windows x86-64 guest with its virtual NIC disconnected. The host used for the local replay had Windows 11 Pro and an existing Visual C++ runtime. On this host, Windows Sandbox is disabled and Hyper-V inventory requires administrator access. Microsoft’s Server evaluation route requires registration. Its public Windows 11 x64 ISO uses a product key to select the edition, and the Azure trial route requires account registration and identity verification. A prepared Windows VM or an already-enabled Windows Sandbox on a suitable host supplies the remaining environment. [Windows Sandbox setup](https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-install) · [Windows Server evaluation](https://www.microsoft.com/en-us/evalcenter/evaluate-windows-server-2025) · [Windows 11 download](https://www.microsoft.com/en-us/software-download/windows11) · [Azure account requirements](https://azure.microsoft.com/en-us/pricing/purchase-options/azure-account#faq)
 
+## Run in Windows Sandbox
+
+1. On an x86-64 host with Windows Sandbox enabled, create dedicated input and evidence directories. Copy the transfer ZIP, the portable Python and MinGit ZIPs listed below, and the reviewed `verify-offline.ps1` into the input directory. Include the pinned Microsoft redistributable if the guest needs it. Keep the evidence directory empty. [Guest runner](../../examples/windows/verify-offline.ps1)
+2. Copy the `.wsb` example and set both `HostFolder` entries to the absolute paths of those directories. Open the edited `.wsb` file to start the guest. It disables networking and clipboard redirection, maps the input directory read-only, and maps the separate evidence directory with write access. [Sandbox configuration example](../../examples/windows/windows-offline.wsb) · [Microsoft configuration reference](https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-configure-using-wsb-file)
+3. If the guest lacks `vcruntime140.dll` in System32, verify the staged redistributable against the pin below, copy it to guest-local storage, and install it there. Open 64-bit Windows PowerShell inside the guest and run the reviewed script.
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File C:\dmg-windows-inputs\verify-offline.ps1
+   ```
+
+4. Check that `guard.exit.txt` records exit 0 and `guard.stdout.log` reports all three phases as verified. Keep both output streams, the guest record and the exact `.wsb` configuration with the release evidence. The guest record includes the Windows build, network adapter status, runtime and tool versions, and archive digests. The runner refuses to start the replay if it sees an active adapter or a mismatched digest.
+
+Windows Sandbox was disabled on the verification host. A Windows PowerShell 5.1 preflight validated the configuration, extracted the pinned inputs, and ran the portable tool versions and the harness help command. It rejected an active adapter and a changed archive and verified log and exit recording with simulated replay outcomes. The disconnected install, upgrade, and rollback remain pending.
+
 ## Prepare the guest and inputs
 
 - Use an authorized Windows x86-64 guest snapshot with no existing Guard installation. Disconnect its virtual NIC before the test. If using Windows Sandbox, set `Networking` to `Disable` and map only the reviewed test inputs. A fresh snapshot allows the check to be repeated independently. [Windows Sandbox configuration](https://learn.microsoft.com/en-us/windows/security/threat-protection/windows-sandbox/windows-sandbox-configure-using-wsb-file)
