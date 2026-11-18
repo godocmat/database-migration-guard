@@ -6,7 +6,7 @@ The shared Rust library defines source ranges, migration inventory, provenance a
 
 Local verification passed with Rust 1.100.0 on native Windows x64 and Ubuntu 24.04.4 x64 in WSL2. Each host ran formatting, locked offline build, Clippy with warnings denied, and six contract tests after fetching the locked dependencies. Actionlint 1.7.12 validated the GitHub workflow locally.
 
-A hosted GitHub Actions run and macOS arm64 verification are pending. The [implementation plan](PLAN.md#18-implementation-milestones) lists the outstanding release gates.
+The later hosted release workflow verified the native macOS arm64 package. The [implementation plan](PLAN.md#18-implementation-milestones) lists the outstanding release gates. [macOS hosted verification](docs/research/hosted-release-acceptance.md#verified-hosted-run)
 
 ## DMG-06 first frozen holdout score
 
@@ -121,6 +121,8 @@ The Windows Sandbox template and guest runner passed PowerShell 5.1 preflight wi
 
 The Wolfi source review verified all 54 installed APKs, collected all 44 archives identified by their SPDX records and verified all 36 checksum-pinned downstream files. That includes the exact Python TLS patch needed for the GitLab image. The original BusyBox downstream build inputs still need producer confirmation. [Image redistribution review](docs/research/image-redistribution-review.md)
 
-Free GitHub-hosted jobs verified the stock Windows Server runner, Linux KVM availability, and macOS arm64 process network denial. A separate standard Ubuntu job installed Windows Server 2025 Standard Evaluation Core into a new QEMU/KVM guest with no virtual NIC. The installed OS reported zero physical adapters, zero default routes, and a matching synthetic checksum. The full Guard macOS install workflow is ready for a reviewed, protected default branch. [GitHub platform evidence](docs/research/github-platform-probe.md) · [Guard macOS workflow](docs/research/hosted-release-acceptance.md#hosted-clean-runner-simulation)
+Free GitHub-hosted jobs verified the stock Windows Server runner, Linux KVM availability, and macOS arm64 process network denial. A separate standard Ubuntu job installed Windows Server 2025 Standard Evaluation Core into a new QEMU/KVM guest with no virtual NIC. The installed OS reported zero physical adapters, zero default routes, and a matching synthetic checksum. [GitHub platform evidence](docs/research/github-platform-probe.md)
 
 The normalized Windows package from `2d3e5e0` passed clean installation, upgrade, and rollback against the pinned `c4974cd` pilot in a disconnected local Windows Server 2025 Standard Evaluation Core x86-64 guest. Each phase matched GitHub replay exits 0, 1, and 3. The upgrade also passed saved report rendering and all ten GitLab replays. The guest returned exit 0 and exported the evidence over its virtual serial port. [Disconnected Windows guest verification](docs/research/windows-offline-acceptance.md)
+
+The free GitHub macOS workflow passed at `3b0c23d` on protected `main`. The first arm64 runner staged two matching native candidate builds and rebuilt the pinned rollback pilot. A fresh runner verified the artifact hashes, blocked a live loopback connection under Seatbelt, and passed install, upgrade, and rollback with process networking denied. Every phase verified the three local GitHub outcomes. The candidate also passed the three saved-report smoke cases and ten local GitLab replays. Both unsigned test executables and the transcript were uploaded as Actions artifacts. [macOS hosted verification](docs/research/hosted-release-acceptance.md#verified-hosted-run)
