@@ -30,11 +30,11 @@ jobs:
         run: |
           libclang=/usr/lib/llvm-18/lib
           clang=/usr/bin/clang-18
-          if [[ ! -f "$libclang/libclang.so" || ! -x "$clang" ]]; then
+          if [[ ! -f "$libclang/libclang.so.1" || ! -x "$clang" ]]; then
             sudo apt-get update
             sudo apt-get install --yes --no-install-recommends clang-18 libclang-18-dev
           fi
-          test -f "$libclang/libclang.so"
+          test -f "$libclang/libclang.so.1"
           test -f "$("$clang" -print-resource-dir)/include/stdbool.h"
           echo "LIBCLANG_PATH=$libclang" >> "$GITHUB_ENV"
           echo "CLANG_PATH=$clang" >> "$GITHUB_ENV"
