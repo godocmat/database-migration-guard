@@ -303,14 +303,10 @@ async fn isolated_rehearsal_distinguishes_server_and_wall_deadlines() {
     let fixture = Fixture::selected();
     let limits = WorkerLimits::new(25_000, 5_000, 250, 100, 5_000).unwrap();
     DockerWorker::run(fixture.config(limits), async |worker| {
-        let mut session = Session::connect(worker)
-            .await
-            .ok()
-            .expect("fixture session");
+        let mut session = Session::connect(worker).await.expect("fixture session");
         let result = session
             .query(&PlannedQuery::Simple("SELECT pg_catalog.pg_sleep(1)"), 1)
             .await
-            .ok()
             .expect("server cancellation response");
         assert_eq!(result.sqlstate.as_deref(), Some("57014"));
         Ok::<(), crate::WorkerError>(())

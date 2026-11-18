@@ -16,6 +16,7 @@ resolver = "3"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.100.0"
+license = "MIT"
 publish = false
 
 [workspace.dependencies]

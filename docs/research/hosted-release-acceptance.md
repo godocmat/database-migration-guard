@@ -1,6 +1,6 @@
 # Hosted and macOS release acceptance
 
-Use disposable pilot repositories with synthetic migrations. A public platform probe used the standalone `codex/platform-acceptance-probe` branch in the designated GitHub repository. The free `ubuntu-24.04` job confirmed KVM and enough disk for an evaluation VM. The `windows-2025` job identified the stock Windows Server 2025 Datacenter runner. The `macos-15` job ran on Apple silicon and verified that Seatbelt denied a live loopback connection after the unsandboxed connection succeeded. The platform probe used synthetic inputs. Hosted Guard enforcement and the macOS package check remain pending. [Platform probe run](https://github.com/godocmat/database-migration-guard/actions/runs/44388580961)
+Use disposable pilot repositories with synthetic migrations. A public platform probe used the standalone `codex/platform-acceptance-probe` branch in the designated GitHub repository. Standard GitHub runners confirmed the Apple silicon Seatbelt control, the stock Windows Datacenter runner, and an isolated Windows Server 2025 Evaluation Core installation under KVM. The full Guard macOS package check later passed on protected `main`. Hosted merge enforcement remains pending. [GitHub platform evidence](github-platform-probe.md) · [macOS package evidence](#verified-hosted-run)
 
 | Check | Inputs the release owner needs to supply |
 | --- | --- |
@@ -78,6 +78,22 @@ When a disconnected Apple silicon host is unavailable, dispatch [the macOS insta
 The first `macos-15` job verifies the native candidate with the release staging helper and builds the pinned rollback on arm64. It retains both inputs in one artifact and passes its artifact ID, candidate archive and manifest SHA-256, and rollback executable SHA-256 to a second job in the same run. The install job downloads those bytes onto a fresh Apple silicon runner, verifies the pins and artifact source commit, and checks install, upgrade, and rollback at one installed path.
 
 The install job applies macOS `sandbox-exec` with `(deny network*)` to each Guard command and its child processes. It first opens a temporary IPv4 loopback listener, checks that the unsandboxed connection succeeds, and requires the same connection to fail with a permission error under the sandbox. The job records the macOS and tool versions, installed binary digests, arm64 Mach-O dependencies, and local gate exits 0, 1, and 3. It retains the transcript as `dmg-macos-install-log-<commit>-<run-attempt>`. The runner stays connected for checkout and artifact transfer. This verifies a clean hosted installation with process-level network isolation. Whole-guest disconnection, signed provenance, and approval for distribution remain separate evidence. [macOS install verifier](../../scripts/verify-macos-upgrade.py) · [Hosted runner lifecycle](https://docs.github.com/en/actions/concepts/runners/github-hosted-runners)
+
+#### Verified hosted run
+
+On 2026-11-18, run `44406264422` passed on protected `main` at `3b0c23de74c6a7d1e03206dbd7b3d60229f14bde`. Two previous attempts hit HTTP 403 at the anonymous GitHub API endpoint for the SBOM generator's producer attestation. The successful run used the retained signed Apple silicon bundle and verified the same upstream generator archive, signer workflow, signer commit, source commit, and tag. [Passing Actions run](https://github.com/godocmat/database-migration-guard/actions/runs/44406264422) · [Producer bundle](../../scripts/attestations/cargo-cyclonedx-0.5.9-aarch64-apple-darwin.jsonl)
+
+The first standard `macos-15` runner reproduced the candidate across two native builds and built rollback from `c4974cd`. A separate standard runner on macOS 15.8.2 arm64 verified the uploaded files and their digests. The baseline loopback connection succeeded and the same connection was blocked with `EPERM` under Seatbelt. The runner verified install, upgrade, and rollback. Each phase passed the local GitHub replay with exits 0, 1, and 3. The candidate also passed all three saved-report smoke cases and all ten local GitLab replay tests. The candidate imports SystemConfiguration.framework, CoreFoundation.framework, `libiconv.2.dylib` and `libSystem.B.dylib`. The rollback fixture imports the two dylibs. Both executables carry linker-generated ad hoc signatures. [Packaging job](https://github.com/godocmat/database-migration-guard/actions/runs/44406264422/job/135162193608) · [Install job](https://github.com/godocmat/database-migration-guard/actions/runs/44406264422/job/135166754673) · [Exact notice inventory](dmg-16-distribution-review.md#macos-arm64-notice-draft)
+
+Both downloaded artifact ZIPs matched the digests published by GitHub. The archive, manifest, package files, and rollback executable matched the job pins, and both executable headers identified arm64 Mach-O. GitHub set a 14-day retention period for the uploads. [Candidate and rollback](https://github.com/godocmat/database-migration-guard/actions/runs/44406264422/artifacts/14476020974) · [Transcript](https://github.com/godocmat/database-migration-guard/actions/runs/44406264422/artifacts/14476220859)
+
+| Retained file | SHA-256 |
+| --- | --- |
+| Candidate package archive | `b2f5dfd6798de074e81c4b9facdbdeb3dcf11520f549a7b3ba30ae3140d0c07c` |
+| Candidate package manifest | `1413b7a1b8a357c0f1584232884aca0a3e64117a7e4ec72e1da2a5e6da3516c6` |
+| Candidate executable | `95eb4233ab8793850ad6272eb3f4c71da1ef2fbc7318e5db67174fb63a725e72` |
+| Rollback executable | `0faab8a82b7e766675ec1948014494c98a41a05e5485be01121e051343599a59` |
+| Install transcript | `8ce8ce05485696086823031994ce703e732628571459f6402f296effc8353f16` |
 
 ### Local native build and disconnected installation
 
