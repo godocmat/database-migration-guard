@@ -19,7 +19,8 @@ Save the archive and the release's checksum list in the same empty folder. The e
 
 ~~~sh
 archive=dmg-0.1.0-x86_64-unknown-linux-gnu.tar.gz
-sha256sum --ignore-missing --check SHA256SUMS &&
+awk -v name="$archive" 'NF == 2 && $2 == name { print }' SHA256SUMS |
+  sha256sum --check --strict &&
   mkdir dmg-install &&
   tar -xzf "$archive" -C dmg-install &&
   ./dmg-install/dmg --version
@@ -38,13 +39,14 @@ Expand-Archive -LiteralPath $archive -DestinationPath dmg-install
 & .\dmg-install\dmg.exe --version
 ~~~
 
-The archives include the MIT license, third-party notices, SBOM, and build manifest. To verify build provenance with the GitHub CLI, replace `ARCHIVE` with the downloaded archive filename or `SHA256SUMS`. [GitHub attestation verification](https://cli.github.com/manual/gh_attestation_verify)
+The archives include the MIT license, third-party notices, SBOM, and build manifest. To verify build provenance with the GitHub CLI, replace `ARCHIVE` with the downloaded archive filename or `SHA256SUMS` and `COMMIT` with the full source commit listed in the release notes. [GitHub attestation verification](https://cli.github.com/manual/gh_attestation_verify)
 
 ~~~sh
 gh attestation verify ARCHIVE \
   --repo godocmat/database-migration-guard \
   --signer-workflow godocmat/database-migration-guard/.github/workflows/native-release.yml \
-  --source-ref refs/heads/main --deny-self-hosted-runners
+  --source-ref refs/heads/main --source-digest COMMIT --signer-digest COMMIT \
+  --deny-self-hosted-runners
 ~~~
 
 ## Build from source
