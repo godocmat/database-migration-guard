@@ -1,10 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fail closed on Git migration roots blocked by a non-tree entry and on scans exceeding the total parser budget. Bound Git pack files during GitHub pilot setup.
+
 ## 0.1.0
 
 The first prebuilt downloads are for Linux x86-64 and Windows x86-64. Each archive includes the CLI, checksums, a CycloneDX SBOM, and the license and third-party notices. [GitHub release](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.0)
 
-- Fail closed on Git migration roots blocked by a non-tree entry and on scans exceeding the total parser budget. Bound Git pack files during GitHub pilot setup.
 - Review plain SQL, SQLx, Flyway, Goose, and Supabase migrations for PostgreSQL 15–18 using the documented runner profiles.
 - Collect scoped catalog and native history over verified TLS. Import pinned evidence into offline checks.
 - Compare expected, current, and proposed schemas. Review explicit rename mappings and check deployed application contracts.

@@ -1,6 +1,6 @@
 # Database Migration Guard security review
 
-Reviewed on 19 November 2026 against public `main` at `328d49cbc7fb52811a5b664612dd625246cacda6`. The review found two medium-severity code issues and three low-severity hardening gaps. The changes make Git discovery and parser limits fail closed, bound GitHub pilot setup, and improve GitHub protections and vulnerability reporting. No critical or high-severity findings were confirmed within the review scope.
+Reviewed on 19 November 2026 against public `main` at `328d49cbc7fb52811a5b664612dd625246cacda6`, including native-release changes merged during the review at `95f825c5d34524e2e68062155fe01cf9acea5603`. The review found two medium-severity code issues and four low-severity hardening gaps. No critical or high-severity findings were confirmed within the review scope.
 
 ## Medium
 
@@ -31,6 +31,10 @@ The protected branch allowed updates without the three workspace jobs passing. A
 ### 5. GitHub did not have private vulnerability reporting or dependency alerts enabled
 
 GitHub now accepts private vulnerability reports and sends Dependabot alerts for supported dependencies. The repository documents how to report a vulnerability and deploy Guard with protected inputs. [Security policy](../SECURITY.md) · [Repository security](https://github.com/godocmat/database-migration-guard/security)
+
+### 6. Download instructions ran the executable before checking its provenance
+
+The original install order verified a checksum from the same release before running the download, then described the separate provenance check. The install guide now verifies the signed checksum list for the approved workflow and source commit before extraction and execution. [Download verification](../README.md#download-v010)
 
 ## Checks and scope
 
