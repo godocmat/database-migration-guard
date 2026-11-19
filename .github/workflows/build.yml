@@ -76,3 +76,10 @@ jobs:
       - name: Verify offline risk corpus
         if: runner.os == 'Linux'
         run: cargo test --locked -p dmg-rules --test corpus -- --ignored
+      - name: Replay GitHub and GitLab gates
+        if: runner.os == 'Linux'
+        run: |
+          replay="$RUNNER_TEMP/dmg-pilot-replay"
+          strip -o "$replay" target/debug/dmg
+          python3 -B integrations/github/tests/replay.py --binary "$replay"
+          python3 -B integrations/gitlab/tests/replay.py --binary "$replay"
