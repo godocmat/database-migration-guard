@@ -78,8 +78,10 @@ jobs:
         run: cargo test --locked -p dmg-rules --test corpus -- --ignored
       - name: Replay GitHub and GitLab gates
         if: runner.os == 'Linux'
+        shell: bash
         run: |
           replay="$RUNNER_TEMP/dmg-pilot-replay"
           strip -o "$replay" target/debug/dmg
-          python3 -B integrations/github/tests/replay.py --binary "$replay"
+          # Show the fixture annotations as log text.
+          python3 -B integrations/github/tests/replay.py --binary "$replay" | sed 's/^/Replay | /'
           python3 -B integrations/gitlab/tests/replay.py --binary "$replay"
