@@ -12,10 +12,11 @@ The project is free to use, modify, and redistribute under the [MIT License](LIC
 | --- | --- |
 | Linux x86-64, tested on Ubuntu 24.04 with glibc 2.39 | [Download tar.gz](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/dmg-0.1.1-x86_64-unknown-linux-gnu.tar.gz) |
 | Windows x86-64 | [Download ZIP](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/dmg-0.1.1-x86_64-pc-windows-msvc.zip) |
+| macOS on Apple silicon (arm64), tested on macOS 15 | [Download tar.gz](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/dmg-0.1.1-aarch64-apple-darwin.tar.gz) |
 
-Save the archive and the release's checksum list in the same empty folder. The extracted CLI runs offline for local migration checks. Install Git to compare commits. Windows uses the x64 Visual C++ Redistributable. [Release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1) · [SHA256SUMS](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/SHA256SUMS) · [Microsoft runtime downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
+The extracted CLI runs offline for local migration checks. Install Git to compare commits. Windows uses the x64 Visual C++ Redistributable. [Release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1) · [Microsoft runtime downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
 
-Verify the attestation for `SHA256SUMS` before extracting or running a download. Replace `COMMIT` with the approved full source commit from the release notes. After verification succeeds, use the commands for your platform to match the archive to the signed checksum list. [GitHub CLI attestation verification](https://cli.github.com/manual/gh_attestation_verify)
+For Linux and Windows, save the archive and `SHA256SUMS` in the same empty folder. Verify the checksum list's attestation before extracting a download. Replace `COMMIT` with the approved full source commit from the release notes, then use the commands for your platform below. [SHA256SUMS](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/SHA256SUMS) · [GitHub CLI attestation verification](https://cli.github.com/manual/gh_attestation_verify)
 
 ~~~sh
 gh attestation verify SHA256SUMS --repo godocmat/database-migration-guard --signer-workflow godocmat/database-migration-guard/.github/workflows/native-release.yml --source-ref refs/heads/main --source-digest COMMIT --signer-digest COMMIT --deny-self-hosted-runners
@@ -47,6 +48,23 @@ Expand-Archive -LiteralPath $archive -DestinationPath dmg-install
 & .\dmg-install\dmg.exe --version
 ~~~
 
+### macOS on Apple silicon
+
+From an empty folder, use the authenticated GitHub CLI to download the archive and verify its attestation before extraction. The attestation records the v0.1.1 source commit and the protected workflow commit shown below. The executable uses a linker-generated ad hoc signature. [macOS attestation bundle](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/macos-provenance.jsonl)
+
+~~~sh
+repo=godocmat/database-migration-guard
+archive=dmg-0.1.1-aarch64-apple-darwin.tar.gz
+workflow_commit=1d3c1b7a9ba074650700d090e2b6c1dadc87f8cf
+gh release download v0.1.1 --repo "$repo" --pattern "$archive" --pattern macos-provenance.jsonl &&
+  gh attestation verify "$archive" --bundle macos-provenance.jsonl --repo "$repo" \
+    --signer-workflow "$repo/.github/workflows/macos-release.yml" --source-ref refs/heads/main \
+    --source-digest "$workflow_commit" --signer-digest "$workflow_commit" --deny-self-hosted-runners &&
+  mkdir dmg-install &&
+  tar -xzf "$archive" -C dmg-install &&
+  ./dmg-install/dmg --version
+~~~
+
 The archives include the MIT license, third-party notices, SBOM, and build manifest.
 
 ## Build from source
@@ -59,7 +77,7 @@ cd database-migration-guard
 cargo build --locked --release -p dmg-cli
 ~~~
 
-The executable is `target/release/dmg` on Linux and macOS or `target/release/dmg.exe` on Windows. Build from source to use Guard on macOS. [Release status](docs/release.md#acceptance-matrix)
+The executable is `target/release/dmg` on Linux and macOS or `target/release/dmg.exe` on Windows. [Release status](docs/release.md#acceptance-matrix)
 
 ## Try an offline check
 
