@@ -91,6 +91,46 @@ struct RootGap {
     message: &'static str,
 }
 
+const UNREADABLE_ROOT: RootGap = RootGap {
+    kind: CoverageGapKind::MissingIntegrityEvidence,
+    message: "could not read the migration root in the local Git commit",
+};
+
+fn root_tree(
+    repository: &Path,
+    revision: &str,
+    root: &RepoPath,
+) -> Result<Option<String>, RootGap> {
+    let root = root.as_str();
+    let ancestors = root.rmatch_indices('/').map(|(end, _)| &root[..end]);
+    for path in std::iter::once(root).chain(ancestors) {
+        let listing = capture(
+            repository,
+            ["ls-tree", "-z", "--full-tree", revision, "--", path],
+            MAX_TREE_ENTRY,
+        )
+        .map_err(|_| UNREADABLE_ROOT)?;
+        if listing.is_empty() {
+            // Git also returns no entry when a non-tree ancestor blocks the lookup.
+            continue;
+        }
+        let entry = listing
+            .strip_suffix(b"\0")
+            .and_then(TreeEntry::parse)
+            .filter(|entry| entry.path == path.as_bytes())
+            .ok_or(UNREADABLE_ROOT)?;
+        if entry.kind != EntryKind::Tree {
+            return Err(RootGap {
+                kind: CoverageGapKind::InvalidPath,
+                message: "the Git migration root and its ancestors must be ordinary trees",
+            });
+        }
+        return Ok((path == root).then(|| entry.oid.to_owned()));
+    }
+    // Git cannot track an empty directory.
+    Ok(None)
+}
+
 fn collect_root(
     repository: &Path,
     revision: &str,
@@ -100,44 +140,16 @@ fn collect_root(
     batch: &mut Batch,
     inventory: &mut Inventory,
 ) -> Result<(), RootGap> {
-    let failed = || RootGap {
-        kind: CoverageGapKind::MissingIntegrityEvidence,
-        message: "could not read the migration root in the local Git commit",
-    };
-    let root_entry = capture(
-        repository,
-        [
-            "ls-tree",
-            "-z",
-            "--full-tree",
-            revision,
-            "--",
-            root.as_str(),
-        ],
-        MAX_TREE_ENTRY,
-    )
-    .map_err(|_| failed())?;
-    if root_entry.is_empty() {
-        // A Git commit cannot track an empty directory.
+    let Some(tree) = root_tree(repository, revision, root)? else {
         return Ok(());
-    }
-    let root_entry = root_entry
-        .strip_suffix(b"\0")
-        .and_then(TreeEntry::parse)
-        .ok_or_else(failed)?;
-    if root_entry.kind != EntryKind::Tree || root_entry.path != root.as_str().as_bytes() {
-        return Err(RootGap {
-            kind: CoverageGapKind::InvalidPath,
-            message: "the Git migration root must be an ordinary tree",
-        });
-    }
+    };
 
     let listing_limit = (*remaining_entries + 1)
         .saturating_mul(MAX_TREE_ENTRY)
         .min(32 * 1024 * 1024);
     let listing = capture(
         repository,
-        ["ls-tree", "-z", "--full-tree", root_entry.oid],
+        ["ls-tree", "-z", "--full-tree", &tree],
         listing_limit,
     )
     .map_err(|error| {
@@ -147,13 +159,13 @@ fn collect_root(
                 message: "Git migration directory listing exceeded its byte limit",
             }
         } else {
-            failed()
+            UNREADABLE_ROOT
         }
     })?;
     let mut entries = Vec::new();
     for record in listing.split_inclusive(|byte| *byte == 0) {
         let Some(entry) = record.strip_suffix(b"\0").and_then(TreeEntry::parse) else {
-            return Err(failed());
+            return Err(UNREADABLE_ROOT);
         };
         if entries.len() == *remaining_entries {
             return Err(RootGap {

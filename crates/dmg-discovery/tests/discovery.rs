@@ -502,6 +502,49 @@ fn git_compares_raw_bytes_and_keeps_unchanged_head_sources() {
 }
 
 #[test]
+fn git_requires_trees_along_nested_migration_roots() {
+    use dmg_discovery::{GitRevisions, discover_git};
+
+    let repo = TestRepo::new().unwrap();
+    init_git(&repo.0);
+    repo.write("project/README.md", b"Synthetic project\n");
+    let base = commit(&repo.0, "base");
+    let blob = git(&repo.0, &["rev-parse", "HEAD:project/README.md"]);
+    let root = RepoPath::new("project/database/migrations").unwrap();
+    let options = DiscoveryOptions::new(
+        vec![root.clone()],
+        Adapter::Supabase,
+        DiscoveryLimits::default(),
+    )
+    .unwrap();
+    let base_revisions = GitRevisions::new(&base, &base).unwrap();
+    let empty = discover_git(&repo.0, &base_revisions, &options);
+    assert_eq!(empty.plan.coverage.status(), CoverageStatus::Complete);
+    assert!(empty.plan.inventory.is_empty());
+
+    // Stage Git modes directly so the test needs neither symlink privileges nor a checkout.
+    for (mode, oid) in [("100644", &blob), ("120000", &blob), ("160000", &base)] {
+        let entry = format!("{mode},{oid},project/database");
+        git(&repo.0, &["update-index", "--add", "--cacheinfo", &entry]);
+        git(&repo.0, &["commit", "-m", mode]);
+        let head = git(&repo.0, &["rev-parse", "HEAD"]);
+        let revisions = GitRevisions::new(&base, &head).unwrap();
+        let result = discover_git(&repo.0, &revisions, &options);
+        assert_eq!(result.plan.coverage.status(), CoverageStatus::Incomplete);
+        assert!(result.plan.integrity.is_none());
+        assert!(result.plan.selected_forwards.is_none());
+        let [gap] = result.plan.coverage.gaps() else {
+            panic!("expected one gap for Git mode {mode}");
+        };
+        assert_eq!(gap.kind, CoverageGapKind::InvalidPath);
+        assert_eq!(
+            gap.scope,
+            dmg_core::coverage::DiagnosticScope::Path { path: root.clone() }
+        );
+    }
+}
+
+#[test]
 fn unavailable_or_noncommit_base_preserves_explicit_head_inventory() {
     let repo = TestRepo::new().unwrap();
     init_git(&repo.0);
