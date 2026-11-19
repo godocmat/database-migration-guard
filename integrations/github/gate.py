@@ -19,6 +19,7 @@ DIGEST = re.compile(r"[a-f0-9]{64}")
 SLUG = re.compile(r"[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+")
 SAFE_PATH_PART = re.compile(r"[A-Za-z0-9_.-]+")
 MIB = 1024 * 1024
+MAX_PREPARE_FILE_BYTES = 512 * MIB
 
 
 class GateError(Exception):
@@ -161,6 +162,11 @@ def save_protected_inputs(directory, repo, revision, config_path, policy_path):
 def prepare(environ):
     require(environ.get("RUNNER_OS") == "Linux" and environ.get("RUNNER_ARCH") == "X64",
             "The hosted pilot expects a Linux x86-64 runner.")
+    # Bound pack files before Git writes them, including objects outside the migration roots.
+    import resource
+    soft, hard = resource.getrlimit(resource.RLIMIT_FSIZE)
+    limits = [value for value in (soft, hard, MAX_PREPARE_FILE_BYTES) if value != resource.RLIM_INFINITY]
+    resource.setrlimit(resource.RLIMIT_FSIZE, (min(limits), hard))
     revision = context(environ)
     directory = Path(tempfile.mkdtemp(prefix="dmg-pilot-", dir=environ["RUNNER_TEMP"]))
     (directory / "home").mkdir()

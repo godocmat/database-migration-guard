@@ -24,6 +24,8 @@ const MAX_TOKENS: usize = 32_768;
 const MAX_DELIMITER_DEPTH: usize = 64;
 const MAX_STATEMENTS: usize = 2_048;
 const MAX_SEGMENTS: usize = 1_024;
+const MAX_PLAN_TOKENS: usize = 1_500_000;
+const MAX_PLAN_STATEMENTS: usize = 65_536;
 
 // The pinned native parser temporarily redirects process-wide stderr.
 static NATIVE_PARSE: Mutex<()> = Mutex::new(());
@@ -47,24 +49,42 @@ pub fn parse_migration(
     bytes: &[u8],
     target: PostgresTarget,
 ) -> ParsedMigration {
-    parse_file(file, Some(bytes), target, &mut VersionContext::default())
+    parse_file(
+        file,
+        Some(bytes),
+        target,
+        &mut VersionContext::default(),
+        &mut ParseBudget::default(),
+    )
 }
 
-/// Analyze every head forward in discovery order. Keep the changed-forward selection
-/// independent from the source used to establish earlier schema facts.
+/// Analyze head forward migrations in discovery order within the parser budget.
+/// Keep changed-forward selection independent of earlier schema facts.
 pub fn parse_plan<'source>(
     plan: &MigrationPlan,
     target: PostgresTarget,
+    source: impl FnMut(&RepoPath) -> Option<&'source [u8]>,
+) -> ParsedPlan {
+    parse_plan_with_budget(plan, target, source, ParseBudget::default())
+}
+
+fn parse_plan_with_budget<'source>(
+    plan: &MigrationPlan,
+    target: PostgresTarget,
     mut source: impl FnMut(&RepoPath) -> Option<&'source [u8]>,
+    mut budget: ParseBudget,
 ) -> ParsedPlan {
     let mut versions = VersionContext::default();
     let mut gaps = plan.coverage.gaps().to_vec();
     let mut migrations = Vec::new();
     for file in &plan.inventory {
         if file.direction == MigrationDirection::Forward {
-            let parsed = parse_file(file, source(&file.path), target, &mut versions);
+            let parsed = parse_file(file, source(&file.path), target, &mut versions, &mut budget);
             gaps.extend_from_slice(parsed.coverage.gaps());
             migrations.push(parsed);
+            if budget.exhausted() {
+                break;
+            }
         }
     }
     ParsedPlan {
@@ -74,11 +94,37 @@ pub fn parse_plan<'source>(
     }
 }
 
+struct ParseBudget {
+    tokens: Option<usize>,
+    statements: Option<usize>,
+}
+
+impl Default for ParseBudget {
+    fn default() -> Self {
+        Self {
+            tokens: Some(MAX_PLAN_TOKENS),
+            statements: Some(MAX_PLAN_STATEMENTS),
+        }
+    }
+}
+
+impl ParseBudget {
+    fn take(remaining: &mut Option<usize>, count: usize) -> bool {
+        *remaining = remaining.and_then(|limit| limit.checked_sub(count));
+        remaining.is_some()
+    }
+
+    fn exhausted(&self) -> bool {
+        self.tokens.is_none() || self.statements.is_none()
+    }
+}
+
 fn parse_file(
     file: &MigrationFile,
     bytes: Option<&[u8]>,
     target: PostgresTarget,
     versions: &mut VersionContext,
+    budget: &mut ParseBudget,
 ) -> ParsedMigration {
     let mut parsed = ParsedMigration {
         identity: file.identity.clone(),
@@ -140,8 +186,12 @@ fn parse_file(
             goose: file.identity.adapter == MigrationAdapter::Goose,
             gaps: &mut gaps,
             statements: &mut parsed.statements,
+            budget,
         };
         segment_parser.parse();
+        if budget.exhausted() {
+            break;
+        }
         previous_end = range.end();
     }
     if file.identity.adapter == MigrationAdapter::Supabase {
@@ -236,6 +286,7 @@ struct SegmentParser<'a, 'source> {
     goose: bool,
     gaps: &'a mut Vec<CoverageGap>,
     statements: &'a mut Vec<Statement>,
+    budget: &'a mut ParseBudget,
 }
 
 impl<'source> SegmentParser<'_, 'source> {
@@ -248,6 +299,17 @@ impl<'source> SegmentParser<'_, 'source> {
 
     fn segment_gap(&mut self, kind: CoverageGapKind, message: &str) {
         self.gap(0..self.sql.len(), kind, message);
+    }
+
+    fn admit_statements(&mut self, count: usize) -> bool {
+        if ParseBudget::take(&mut self.budget.statements, count) {
+            return true;
+        }
+        self.segment_gap(
+            CoverageGapKind::InputLimitExceeded,
+            "migration analysis exceeds the total parser statement limit",
+        );
+        false
     }
 
     fn parse(&mut self) {
@@ -302,6 +364,14 @@ impl<'source> SegmentParser<'_, 'source> {
                 return None;
             }
         };
+        // Per-segment limits do not bound the work and facts retained across a plan.
+        if !ParseBudget::take(&mut self.budget.tokens, scanned.len()) {
+            self.segment_gap(
+                CoverageGapKind::InputLimitExceeded,
+                "migration analysis exceeds the total parser token limit",
+            );
+            return None;
+        }
         if scanned.len() > MAX_TOKENS {
             self.segment_gap(
                 CoverageGapKind::InputLimitExceeded,
@@ -403,6 +473,9 @@ impl<'source> SegmentParser<'_, 'source> {
     }
 
     fn normalize_batch(&mut self, raw: &[RawStmt], tokens: &[SqlToken<'_>], end: usize) {
+        if !self.admit_statements(raw.len()) {
+            return;
+        }
         let mut next = 0;
         for statement in raw {
             let Some((start, end)) = self.native_range(statement, end) else {
@@ -458,6 +531,9 @@ impl<'source> SegmentParser<'_, 'source> {
             );
             return;
         };
+        if !self.admit_statements(groups.len()) {
+            return;
+        }
         let before = self.gaps.len();
         for group in groups {
             let Some(range) = token_range(group) else {
@@ -555,4 +631,65 @@ fn recoverable_groups<'tokens, 'sql>(
         groups.push(&tokens[first..]);
     }
     Some(groups)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmg_core::migration::{ExecutionMode, MigrationIdentity};
+
+    #[test]
+    fn total_limits_preserve_earlier_analysis_and_stop_at_the_unadmitted_migration() {
+        let sql = "SELECT 1;";
+        let make_file = |version: i64| MigrationFile {
+            identity: MigrationIdentity::numeric(MigrationAdapter::Plain, version),
+            path: RepoPath::new(format!("migrations/{version}_fixture.sql")).unwrap(),
+            direction: MigrationDirection::Forward,
+            digest: ContentDigest::of(sql.as_bytes()),
+            source_segments: vec![ByteRange::new(0, sql.len()).unwrap()],
+            execution: ExecutionMode::PSQL_FILE_TRANSACTION,
+        };
+        let plan = MigrationPlan {
+            selected_forwards: None,
+            inventory: (1..=3).map(make_file).collect(),
+            integrity: None,
+            applied_history: None,
+            coverage: Coverage::Complete,
+        };
+
+        let one_file_tokens = scan(sql).unwrap().len();
+        for (tokens, statements, limit) in [
+            (one_file_tokens, MAX_PLAN_STATEMENTS, "token"),
+            (MAX_PLAN_TOKENS, 1, "statement"),
+        ] {
+            let mut read = 0;
+            let parsed = parse_plan_with_budget(
+                &plan,
+                PostgresTarget::V18,
+                |_| {
+                    read += 1;
+                    Some(sql.as_bytes())
+                },
+                ParseBudget {
+                    tokens: Some(tokens),
+                    statements: Some(statements),
+                },
+            );
+            assert_eq!(read, 2);
+            let [first, second] = parsed.migrations.as_slice() else {
+                panic!("expected parsing to stop at the limit");
+            };
+            assert_eq!(first.coverage, Coverage::Complete);
+            assert_eq!(first.statements.len(), 1);
+            assert!(second.statements.is_empty());
+            let [gap] = parsed.coverage.gaps() else {
+                panic!("expected one parser limit gap");
+            };
+            assert_eq!(gap.kind, CoverageGapKind::InputLimitExceeded);
+            assert!(gap.message.contains(limit));
+            assert!(
+                matches!(&gap.scope, DiagnosticScope::Span { span } if span.path == second.path)
+            );
+        }
+    }
 }

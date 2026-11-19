@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fail closed on Git migration roots blocked by a non-tree entry and on scans exceeding the total parser budget. Bound Git pack files during GitHub pilot setup.
+
 ## 0.1.0
 
 The first prebuilt downloads are for Linux x86-64 and Windows x86-64. Each archive includes the CLI, checksums, a CycloneDX SBOM, and the license and third-party notices. [GitHub release](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.0)

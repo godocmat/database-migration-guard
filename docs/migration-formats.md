@@ -16,6 +16,8 @@ The inventory is sorted by the adapter's version or repeatable order, then direc
 
 Use `discover_worktree` for a local filesystem scan. It selects every forward file when discovery is complete. Use `discover_git` with two exact local commit IDs to compare a trusted base with a candidate. Git for Windows 2.45.1 was verified. Git reads the original blobs without checkout filters or replacement objects. The reader disables lazy fetching and transport protocols, caps Git output and migration bytes, and uses a 30-second deadline for each Git command and each revision's batch blob reader. The Git repository and its object store are local inputs. [Git object reading](https://git-scm.com/docs/git-cat-file) · [Git local options](https://git-scm.com/docs/git)
 
+A root absent from a Git commit can represent an empty migration inventory. Every existing component of a configured root must be an ordinary Git tree. A file, symbolic link, or submodule at the root or any of its parent paths makes discovery incomplete.
+
 Changed forward files are selected in version order. A byte-identical move within the same version retains unchanged integrity and records both paths. The moved forward remains selected. A move to a different version produces a missing old identity and a new identity. Changes to a reversible Down file appear in the integrity comparison. Missing Git evidence leaves selection unresolved and the available candidate inventory remains bound to the explicit head commit. The caller supplies trusted commit IDs and any required ancestry policy.
 
 ## Trusted manifests

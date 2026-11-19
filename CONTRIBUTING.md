@@ -26,4 +26,4 @@ cargo test --locked --workspace
 
 The first build needs the registry packages in `Cargo.lock`. After `cargo fetch --locked`, pass `--offline` to the Cargo build, lint, or test command to use the local cache. Commit dependency changes and the corresponding lockfile together. [Cargo offline mode](https://doc.rust-lang.org/cargo/reference/config.html#netoffline)
 
-Use the worktree and integration order in the [implementation plan](PLAN.md#22-parallel-execution-with-codex-worktrees). Put input bytes, including encoding and line endings, through the same paths as existing callers. Preserve v1 field names and meanings when adding optional fields to reports. Update the contract tests for changes to serialization or gate behavior.
+Put input bytes, including encoding and line endings, through the same paths as existing callers. Preserve v1 field names and meanings when adding optional fields to reports. Update the contract tests for changes to serialization or gate behavior.

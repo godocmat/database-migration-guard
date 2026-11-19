@@ -15,6 +15,12 @@ The project is free to use, modify, and redistribute under the [MIT License](LIC
 
 Save the archive and the release's checksum list in the same empty folder. The extracted CLI runs offline for local migration checks. Install Git to compare commits. Windows uses the x64 Visual C++ Redistributable. [Release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.0) · [SHA256SUMS](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.0/SHA256SUMS) · [Microsoft runtime downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
 
+Verify the attestation for `SHA256SUMS` before extracting or running a download. Replace `COMMIT` with the approved full source commit from the release notes. After verification succeeds, use the commands for your platform to match the archive to the signed checksum list. [GitHub CLI attestation verification](https://cli.github.com/manual/gh_attestation_verify)
+
+~~~sh
+gh attestation verify SHA256SUMS --repo godocmat/database-migration-guard --signer-workflow godocmat/database-migration-guard/.github/workflows/native-release.yml --source-ref refs/heads/main --source-digest COMMIT --signer-digest COMMIT --deny-self-hosted-runners
+~~~
+
 ### Linux
 
 ~~~sh
@@ -39,15 +45,7 @@ Expand-Archive -LiteralPath $archive -DestinationPath dmg-install
 & .\dmg-install\dmg.exe --version
 ~~~
 
-The archives include the MIT license, third-party notices, SBOM, and build manifest. To verify build provenance with the GitHub CLI, replace `ARCHIVE` with the downloaded archive filename or `SHA256SUMS` and `COMMIT` with the full source commit listed in the release notes. [GitHub attestation verification](https://cli.github.com/manual/gh_attestation_verify)
-
-~~~sh
-gh attestation verify ARCHIVE \
-  --repo godocmat/database-migration-guard \
-  --signer-workflow godocmat/database-migration-guard/.github/workflows/native-release.yml \
-  --source-ref refs/heads/main --source-digest COMMIT --signer-digest COMMIT \
-  --deny-self-hosted-runners
-~~~
+The archives include the MIT license, third-party notices, SBOM, and build manifest.
 
 ## Build from source
 
@@ -101,3 +99,5 @@ The example returns exit `0` and writes a `pass` decision to `report.json`. Chec
 - Adapt the GitHub and GitLab CI examples to your repository. Protected merge enforcement requires provider-specific settings and live pilot verification. [GitHub](docs/github-pilot.md) · [GitLab](docs/gitlab-ci.md)
 
 Run `cargo test --locked --workspace` from the Guard checkout. [Contributing and verification](CONTRIBUTING.md)
+
+Use GitHub private vulnerability reporting for security issues. [Security policy](SECURITY.md)
