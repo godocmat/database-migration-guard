@@ -111,8 +111,8 @@ def validate_sbom(path, work):
     sbom_validator(work).validate(report)
 
 
-def stage(target, commit, generator, path):
-    python("scripts/stage-release.py", "stage", "--source", ROOT, "--expected-commit", commit,
+def stage(source, target, commit, generator, path):
+    python("scripts/stage-release.py", "stage", "--source", source, "--expected-commit", commit,
            "--target", target, "--cyclonedx", generator, "--output", path, timeout=960)
     pin = sha256(path / "package.json")
     python("scripts/stage-release.py", "verify", "--package", path, "--manifest-sha256", pin)
@@ -176,7 +176,7 @@ def build_distribution(target, commit, version, candidate, pin, output, work):
     )
 
 
-def verify(target, commit, output, work, distribution=None):
+def verify(source, target, commit, output, work, distribution):
     if output.exists() or output.is_symlink():
         raise ValueError("Choose a new artifact path")
     if distribution and (
@@ -187,15 +187,15 @@ def verify(target, commit, output, work, distribution=None):
             for path in (output.parent / "pins.json", output.parent / f"rollback-{executable_name(target)}")
         )
     ):
-        raise ValueError("Choose a new Linux or Windows release path with the expected version and filename.")
+        raise ValueError("Choose a new native release path with the expected version and filename.")
     run("git", "--version")
-    run("rustc", "-Vv")
+    run("rustc", "-Vv", cwd=source)
     run(sys.executable, "--version")
-    run("cargo", "fetch", "--locked", "--target", target, timeout=180)
+    run("cargo", "fetch", "--locked", "--target", target, cwd=source, timeout=180)
     generator = install_generator(target, work)
     first, second = work / "first", work / "second"
-    pin = stage(target, commit, generator, first)
-    stage(target, commit, generator, second)
+    pin = stage(source, target, commit, generator, first)
+    stage(source, target, commit, generator, second)
     check_reproducible(first, second)
     validate_sbom(first / "dmg.cdx.json", work)
 
@@ -227,11 +227,13 @@ def main():
     parser.add_argument("target", choices=TARGETS)
     parser.add_argument("commit")
     parser.add_argument("output", type=Path)
+    parser.add_argument("--source", type=Path, default=ROOT, help="clean checkout of the approved source")
     parser.add_argument("--distribution", metavar="VERSION", help="include official distribution and rollback inputs")
     args = parser.parse_args()
     try:
         with tempfile.TemporaryDirectory(prefix="dmg-native-ci-", dir=args.output.parent) as directory:
-            verify(args.target, args.commit, args.output, Path(directory).resolve(), args.distribution)
+            verify(args.source.resolve(strict=True), args.target, args.commit, args.output,
+                   Path(directory).resolve(), args.distribution)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError, tarfile.TarError, zipfile.BadZipFile, ValidationError) as error:
         parser.exit(1, f"Native package verification failed. {error}\n")
 

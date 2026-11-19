@@ -13,6 +13,7 @@ MAX_BINARY_BYTES = 64 * 1024 * 1024
 NATIVE_RELEASE_FORMATS = {
     "x86_64-unknown-linux-gnu": ".tar.gz",
     "x86_64-pc-windows-msvc": ".zip",
+    "aarch64-apple-darwin": ".tar.gz",
 }
 DISTRIBUTION_DOCUMENTS = {
     "license": ("LICENSE", 64 * 1024),

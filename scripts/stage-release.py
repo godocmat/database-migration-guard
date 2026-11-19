@@ -206,7 +206,7 @@ def prepare_distribution(package, pin, license_path, notices, output):
     manifest = verify(package, pin)
     target = manifest["target"]
     if manifest["schema_version"] != 1 or target not in NATIVE_RELEASE_FORMATS:
-        raise ValueError("Use a verified Linux or Windows x86-64 native candidate.")
+        raise ValueError("Use a verified candidate for a supported native release target.")
     if output.exists() or output.is_symlink():
         raise ValueError("Choose a new distribution directory.")
     with tempfile.TemporaryDirectory(prefix="dmg-distribution-", dir=output.parent) as scratch:
