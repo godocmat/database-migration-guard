@@ -6,7 +6,7 @@
 - Bound parser work across the full migration set and retain earlier findings when a scan exceeds the limit.
 - Limit each file written during GitHub pilot setup to 512 MiB and run the pilot's Python steps in isolated mode.
 
-The Linux and Windows x86-64 archives and their checksum list have signed build attestations. [GitHub release](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1) · [Security review](docs/security_best_practices_report.md)
+Prebuilt downloads cover Linux and Windows x86-64 and macOS on Apple silicon. GitHub build attestations cover each archive and the Linux and Windows checksum list. [GitHub release](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1) · [Security review](docs/security_best_practices_report.md)
 
 ## 0.1.0
 

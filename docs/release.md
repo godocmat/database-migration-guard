@@ -40,7 +40,7 @@ Review imported native libraries on each platform with a native inspection tool 
 
 The native package notice review records the locked crate archives, included upstream texts, and outstanding runtime and image scope. Include the project license text and the approved third-party notices with any official artifact release. [Third-party notice review](research/release-notices-review.md) · [Release acceptance](../PLAN.md#20-definition-of-done)
 
-For the x86-64 Linux and Windows archives, `scripts/package-notices.py` verifies the staged package, matches its SBOM to the pinned Cargo sources, and collects notices from the locked crate archives and the Rust toolchain. The archives include `THIRD-PARTY-NOTICES.txt` with exact source links and `RUST-STDLIB-COPYRIGHT.html`. Review the native notices again after changing the locked dependencies or Rust toolchain.
+For the native release archives, `scripts/package-notices.py` verifies the staged package, matches its SBOM to the pinned Cargo sources, and collects notices from the locked crate archives and the Rust toolchain. The archives include `THIRD-PARTY-NOTICES.txt` with exact source links and `RUST-STDLIB-COPYRIGHT.html`. The macOS package includes notices for the Apple framework bindings and arm64 assembly sources. Review the native notices again after changing the locked dependencies or Rust toolchain.
 
 ## Verify and smoke test an installation
 
@@ -165,7 +165,9 @@ The package pin and the official CycloneDX 1.5 schema validated. The installed-p
 
 ## Acceptance matrix
 
-v0.1.1 ships Linux and Windows x86-64 archives with a project license, third-party notices, a CycloneDX SBOM, and checksums. The release provides GitHub build attestations for both archives and the checksum list. [v0.1.1 downloads and release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1)
+v0.1.1 ships Linux and Windows x86-64 archives and a macOS arm64 archive. Each includes the project license, third-party notices, a CycloneDX SBOM, and package checksums. GitHub build attestations cover every archive and the Linux and Windows download checksum list. [v0.1.1 downloads and release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1)
+
+Dispatch `macos-release.yml` from protected `main` with the release tag and its approved full commit SHA. The workflow builds the tagged source, verifies clean install, upgrade and rollback on Apple silicon with process networking denied, and checks the archive's source commit before signing. Verify the archive with `macos-provenance.jsonl` before installing. [macOS installation](../README.md#macos-on-apple-silicon)
 
 The broader Core v1 distribution proposal at `3b0c23de74c6a7d1e03206dbd7b3d60229f14bde` remains on hold. The matrix records the evidence and remaining work for that proposal, including macOS packages, container redistribution, and live protected GitHub and GitLab enforcement. [DMG-16 release decision](research/dmg-16-release-decision.md) · [Progress log](../PROGRESS.md)
 

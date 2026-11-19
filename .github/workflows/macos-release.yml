@@ -111,35 +111,20 @@ jobs:
           artifact-ids: ${{ needs.package.outputs.artifact_id }}
           path: ${{ runner.temp }}/dmg-dist/
           merge-multiple: true
-      - name: Record the workflow and tagged source in SLSA provenance
+      - name: Confirm the archive manifest matches the approved release
         shell: bash
+        env:
+          DMG_VERSION: ${{ needs.package.outputs.version }}
         run: |
-          jq -n --arg repo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
-            --arg run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" '
-            {
-              buildDefinition: {
-                buildType: "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1",
-                externalParameters: {
-                  workflow: {repository: $repo, path: ".github/workflows/macos-release.yml", ref: env.GITHUB_REF},
-                  inputs: {source_tag: env.RELEASE_TAG, source_commit: env.RELEASE_SOURCE}
-                },
-                resolvedDependencies: [
-                  {uri: ("git+" + $repo + "@" + env.GITHUB_REF), digest: {gitCommit: env.GITHUB_SHA}},
-                  {uri: ("git+" + $repo + "@refs/tags/" + env.RELEASE_TAG), digest: {gitCommit: env.RELEASE_SOURCE}}
-                ]
-              },
-              runDetails: {
-                builder: {id: (env.GITHUB_SERVER_URL + "/" + env.GITHUB_WORKFLOW_REF)},
-                metadata: {invocationId: $run}
-              }
-            }' > "$RUNNER_TEMP/dmg-macos-predicate.json"
+          cd "$RUNNER_TEMP/dmg-dist"
+          tar -xOf "$DMG_ARCHIVE" package.json |
+            jq -e '.schema_version == 2 and .source_commit == env.RELEASE_SOURCE and
+                   .target == env.DMG_TARGET and .version == env.DMG_VERSION'
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         id: provenance
         with:
           subject-path: ${{ runner.temp }}/dmg-dist/${{ env.DMG_ARCHIVE }}
-          predicate-path: ${{ runner.temp }}/dmg-macos-predicate.json
-          predicate-type: https://slsa.dev/provenance/v1
-      - name: Verify the attestation and the signed source pin
+      - name: Verify the protected workflow attestation
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -149,12 +134,7 @@ jobs:
           gh attestation verify "$DMG_ARCHIVE" --bundle "$DMG_PROVENANCE" --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/macos-release.yml" \
             --signer-digest "$GITHUB_SHA" --source-ref refs/heads/main --source-digest "$GITHUB_SHA" \
-            --deny-self-hosted-runners --predicate-type https://slsa.dev/provenance/v1 --format json \
-            > "$RUNNER_TEMP/dmg-macos-verified.json"
-          jq -e --arg uri "git+$GITHUB_SERVER_URL/$GITHUB_REPOSITORY@refs/tags/$RELEASE_TAG" \
-            --arg source "$RELEASE_SOURCE" \
-            'any(.[].verificationResult.statement.predicate.buildDefinition.resolvedDependencies[];
-               .uri == $uri and .digest.gitCommit == $source)' "$RUNNER_TEMP/dmg-macos-verified.json"
+            --deny-self-hosted-runners --predicate-type https://slsa.dev/provenance/v1
           cp "$DMG_PROVENANCE" macos-provenance.jsonl
           sha256sum "$DMG_ARCHIVE"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
