@@ -6,14 +6,14 @@ Guard supports PostgreSQL 15–18 and documented plain SQL, SQLx, Flyway, Goose,
 
 The project is free to use, modify, and redistribute under the [MIT License](LICENSE).
 
-## Download v0.1.0
+## Download v0.1.1
 
 | Platform | Archive |
 | --- | --- |
-| Linux x86-64, tested on Ubuntu 24.04 with glibc 2.39 | [Download tar.gz](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.0/dmg-0.1.0-x86_64-unknown-linux-gnu.tar.gz) |
-| Windows x86-64 | [Download ZIP](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.0/dmg-0.1.0-x86_64-pc-windows-msvc.zip) |
+| Linux x86-64, tested on Ubuntu 24.04 with glibc 2.39 | [Download tar.gz](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/dmg-0.1.1-x86_64-unknown-linux-gnu.tar.gz) |
+| Windows x86-64 | [Download ZIP](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/dmg-0.1.1-x86_64-pc-windows-msvc.zip) |
 
-Save the archive and the release's checksum list in the same empty folder. The extracted CLI runs offline for local migration checks. Install Git to compare commits. Windows uses the x64 Visual C++ Redistributable. [Release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.0) · [SHA256SUMS](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.0/SHA256SUMS) · [Microsoft runtime downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
+Save the archive and the release's checksum list in the same empty folder. The extracted CLI runs offline for local migration checks. Install Git to compare commits. Windows uses the x64 Visual C++ Redistributable. [Release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1) · [SHA256SUMS](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/SHA256SUMS) · [Microsoft runtime downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
 
 Verify the attestation for `SHA256SUMS` before extracting or running a download. Replace `COMMIT` with the approved full source commit from the release notes. After verification succeeds, use the commands for your platform to match the archive to the signed checksum list. [GitHub CLI attestation verification](https://cli.github.com/manual/gh_attestation_verify)
 
@@ -21,10 +21,12 @@ Verify the attestation for `SHA256SUMS` before extracting or running a download.
 gh attestation verify SHA256SUMS --repo godocmat/database-migration-guard --signer-workflow godocmat/database-migration-guard/.github/workflows/native-release.yml --source-ref refs/heads/main --source-digest COMMIT --signer-digest COMMIT --deny-self-hosted-runners
 ~~~
 
+To verify with the downloaded attestation bundle, also pass `--bundle provenance.jsonl` to the same command. [Attestation bundle](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/provenance.jsonl)
+
 ### Linux
 
 ~~~sh
-archive=dmg-0.1.0-x86_64-unknown-linux-gnu.tar.gz
+archive=dmg-0.1.1-x86_64-unknown-linux-gnu.tar.gz
 awk -v name="$archive" 'NF == 2 && $2 == name { print }' SHA256SUMS |
   sha256sum --check --strict &&
   mkdir dmg-install &&
@@ -35,7 +37,7 @@ awk -v name="$archive" 'NF == 2 && $2 == name { print }' SHA256SUMS |
 ### Windows PowerShell
 
 ~~~powershell
-$archive = 'dmg-0.1.0-x86_64-pc-windows-msvc.zip'
+$archive = 'dmg-0.1.1-x86_64-pc-windows-msvc.zip'
 $pattern = '^([a-f0-9]{64})  ' + [regex]::Escape($archive) + '$'
 $checksumEntries = @(Select-String -LiteralPath SHA256SUMS -Pattern $pattern)
 if ($checksumEntries.Count -ne 1) { throw 'Expected one archive checksum' }

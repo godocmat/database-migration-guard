@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "dmg-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "dmg-core",
@@ -428,7 +428,7 @@ dependencies = [
 
 [[package]]
 name = "dmg-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -439,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "dmg-discovery"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -452,7 +452,7 @@ dependencies = [
 
 [[package]]
 name = "dmg-inspect"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dmg-core",
  "rustls",
@@ -465,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "dmg-postgres"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dmg-core",
  "dmg-discovery",
@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "dmg-report"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dmg-core",
  "serde",
@@ -484,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "dmg-rules"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dmg-core",
  "dmg-discovery",
@@ -495,7 +495,7 @@ dependencies = [
 
 [[package]]
 name = "dmg-simulate"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "dmg-core",

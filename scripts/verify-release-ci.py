@@ -140,7 +140,7 @@ def build_rollback(target, work, destination):
         run("git", "worktree", "remove", checkout)
     previous = json.loads((package / "package.json").read_bytes())
     if (previous["source_commit"], previous["target"]) != (PREVIOUS_SOURCE, target):
-        raise ValueError("The rollback binary was not built from the pinned pilot source.")
+        raise ValueError("The rollback binary was not built from the pinned previous source.")
     shutil.copyfile(package / previous["binary"]["name"], destination)
     if sha256(destination) != previous["binary"]["sha256"]:
         raise ValueError("The staged rollback executable differs from its pilot manifest.")

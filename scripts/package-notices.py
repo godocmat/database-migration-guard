@@ -17,7 +17,7 @@ from package_common import sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = {"x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"}
-LOCK_DIGEST = "aa374723aa1e78466cc54a42bf63195e7e66790aa843495d6e8263f6895b4221"
+LOCK_DIGEST = "3d66cf1d4edfb7abd9629fdefef5aed09d1db5ee21bc494660a190afc5ecee8c"
 RUST_VERSION = "1.100.0"
 RUST_REPORT_DIGEST = "626556344c12679d7cab2c1aa2ce80de01937b62c2c88c62f0650a469be18799"
 REGISTRY_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"

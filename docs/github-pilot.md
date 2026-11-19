@@ -19,7 +19,7 @@ The staging script requires Python 3.11 or newer and a new output directory. For
 ```sh
 cd /path/to/new-pilot-package
 sha256sum -c SHA256SUMS
-./dmg-0.1.0-x86_64-unknown-linux-gnu --version
+./dmg-0.1.1-x86_64-unknown-linux-gnu --version
 ```
 
 The pilot needs an approved HTTPS download that the runner can reach without an account credential. Stage the raw executable under the filename in the checksum list. Retain the reviewed metadata and pin the expected digest in the protected workflow independently of the download. An organization can use an existing approved artifact host. The local staging command creates files only. Release publication is a separate step. [GitHub action pinning](https://docs.github.com/en/actions/reference/security/secure-use#using-third-party-actions)

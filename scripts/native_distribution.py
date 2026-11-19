@@ -24,7 +24,7 @@ from package_common import (
 from release_sbom import MAX_SBOM_BYTES
 
 ROOT = Path(__file__).resolve().parents[1]
-PREVIOUS_SOURCE = "c4974cd11180440d710c0843a952caa11ce786e3"
+PREVIOUS_SOURCE = "95f825c5d34524e2e68062155fe01cf9acea5603"  # v0.1.0
 METADATA_LIMIT = 64 * 1024
 
 
@@ -176,7 +176,7 @@ def verify_install(inputs, source, version, target, work):
     active = work / executable_name(target)
     for phase, binary, digest in (
         ("clean installation", candidate, candidate_digest),
-        ("prior pilot installation", previous, pins["previous_sha256"]),
+        ("previous version installation", previous, pins["previous_sha256"]),
         ("same-path upgrade", candidate, candidate_digest),
         ("rollback", previous, pins["previous_sha256"]),
     ):

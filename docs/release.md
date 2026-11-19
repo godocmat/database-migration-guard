@@ -165,7 +165,7 @@ The package pin and the official CycloneDX 1.5 schema validated. The installed-p
 
 ## Acceptance matrix
 
-v0.1.0 ships Linux and Windows x86-64 archives with a project license, third-party notices, a CycloneDX SBOM, checksums, and GitHub build attestations. The release assets record the exact build source and packages. [v0.1.0 downloads and release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.0)
+v0.1.1 ships Linux and Windows x86-64 archives with a project license, third-party notices, a CycloneDX SBOM, and checksums. The release provides GitHub build attestations for both archives and the checksum list. [v0.1.1 downloads and release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1)
 
 The broader Core v1 distribution proposal at `3b0c23de74c6a7d1e03206dbd7b3d60229f14bde` remains on hold. The matrix records the evidence and remaining work for that proposal, including macOS packages, container redistribution, and live protected GitHub and GitLab enforcement. [DMG-16 release decision](research/dmg-16-release-decision.md) · [Progress log](../PROGRESS.md)
 
