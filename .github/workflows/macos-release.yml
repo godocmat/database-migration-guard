@@ -22,7 +22,7 @@ env:
 
 jobs:
   package:
-    name: Build and package Apple silicon CLI
+    name: Build and verify Apple silicon CLI
     runs-on: macos-15
     timeout-minutes: 45
     outputs:
@@ -77,40 +77,10 @@ jobs:
           mkdir "$inputs"
           python -B scripts/verify-release-ci.py --source "$source" --distribution "$DMG_VERSION" \
             "$DMG_TARGET" "$RELEASE_SOURCE" "$inputs/dmg-$DMG_VERSION-$DMG_TARGET.tar.gz"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        id: upload
-        with:
-          name: dmg-macos-release-inputs-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/dmg-inputs/
-          if-no-files-found: error
-          retention-days: 14
-          compression-level: 0
-
-  verify:
-    name: Verify installation, upgrade and rollback on Apple silicon
-    needs: package
-    runs-on: macos-15
-    timeout-minutes: 15
-    outputs:
-      artifact_id: ${{ steps.upload.outputs.artifact-id }}
-    env:
-      DMG_VERSION: ${{ needs.package.outputs.version }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.14.10'
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          artifact-ids: ${{ needs.package.outputs.artifact_id }}
-          path: ${{ runner.temp }}/dmg-inputs/
-          merge-multiple: true
       - name: Exercise the exact archive with networking denied
         shell: bash
+        env:
+          DMG_VERSION: ${{ steps.source.outputs.version }}
         run: |
           /usr/bin/sandbox-exec -p '(version 1) (allow default) (deny network*)' \
             python -B scripts/native_distribution.py --inputs "$RUNNER_TEMP/dmg-inputs" \
@@ -119,14 +89,14 @@ jobs:
         id: upload
         with:
           name: dmg-macos-release-verified-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/dmg-inputs/dmg-${{ env.DMG_VERSION }}-${{ env.DMG_TARGET }}.tar.gz
+          path: ${{ runner.temp }}/dmg-inputs/dmg-${{ steps.source.outputs.version }}-${{ env.DMG_TARGET }}.tar.gz
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
 
   attest:
     name: Attest and verify the macOS download
-    needs: [package, verify]
+    needs: package
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -138,7 +108,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          artifact-ids: ${{ needs.verify.outputs.artifact_id }}
+          artifact-ids: ${{ needs.package.outputs.artifact_id }}
           path: ${{ runner.temp }}/dmg-dist/
           merge-multiple: true
       - name: Record the workflow and tagged source in SLSA provenance
