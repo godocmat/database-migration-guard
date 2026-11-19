@@ -1,4 +1,4 @@
-"""Assemble the reviewed third-party notices for a staged x86-64 native package."""
+"""Assemble the reviewed third-party notices for a staged native package."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ import sys
 import tarfile
 import tomllib
 
-from package_common import sha256
+from package_common import NATIVE_RELEASE_FORMATS, sha256
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGETS = {"x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"}
+MACOS_TARGET = "aarch64-apple-darwin"
 LOCK_DIGEST = "3d66cf1d4edfb7abd9629fdefef5aed09d1db5ee21bc494660a190afc5ecee8c"
 RUST_VERSION = "1.100.0"
 RUST_REPORT_DIGEST = "626556344c12679d7cab2c1aa2ce80de01937b62c2c88c62f0650a469be18799"
@@ -28,6 +28,21 @@ NOTICE_NAME = re.compile(
     re.IGNORECASE,
 )
 VENDORED = {"libpg_query", "postgresql-parser", "xxhash", "upb", "utf8-range", "ring-native"}
+OBJC2_COMMIT = "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+OBJC2_SOURCES = {("objc2-core-foundation", "0.3.2"), ("objc2-system-configuration", "0.3.2")}
+ARM64_RING_GENERATORS = {
+    "crypto/chacha/asm/chacha-armv8.pl",
+    "crypto/cipher/asm/chacha20_poly1305_armv8.pl",
+    "crypto/fipsmodule/aes/asm/aesv8-armx.pl",
+    "crypto/fipsmodule/aes/asm/aesv8-gcm-armv8.pl",
+    "crypto/fipsmodule/aes/asm/ghash-neon-armv8.pl",
+    "crypto/fipsmodule/aes/asm/ghashv8-armx.pl",
+    "crypto/fipsmodule/aes/asm/vpaes-armv8.pl",
+    "crypto/fipsmodule/bn/asm/armv8-mont.pl",
+    "crypto/fipsmodule/ec/asm/p256-armv8-asm.pl",
+    "crypto/fipsmodule/sha/asm/sha512-armv8.pl",
+    "crypto/perlasm/arm-xlate.pl",
+}
 PARSER_HEADERS = (
     ("vendor/xxhash/xxhash.c", b"/*", b"*/"),
     ("vendor/xxhash/xxhash.h", b"/*", b"*/"),
@@ -59,8 +74,8 @@ def release_input(package, pin):
     manifest = json.loads((package / "package.json").read_bytes())
     target = manifest["target"]
     commit = manifest["source_commit"]
-    if target not in TARGETS:
-        raise ValueError("Native notices are reviewed for Linux and Windows x86-64.")
+    if target not in NATIVE_RELEASE_FORMATS:
+        raise ValueError("Native notices are unavailable for this target.")
     lock = git_blob(commit, "Cargo.lock")
     if digest(lock).hexdigest() != manifest["cargo_lock_sha256"] or manifest["cargo_lock_sha256"] != LOCK_DIGEST:
         raise ValueError("Review native redistribution notices for this Cargo.lock.")
@@ -143,13 +158,16 @@ def parser_notices(archive, prefix, sections):
         add_text(sections, name, content[begin:content.index(end, begin) + len(end)])
 
 
-def ring_notices(archive, prefix, sections):
+def ring_notices(archive, prefix, target, sections):
     generators = set()
     for member in sorted(archive.getmembers(), key=lambda entry: entry.name):
         if not member.isfile() or not member.name.startswith(prefix):
             continue
         name = member.name.removeprefix(prefix)
-        is_generator = "x86_64" in name and name.endswith(".pl")
+        if target == MACOS_TARGET:
+            is_generator = name in ARM64_RING_GENERATORS
+        else:
+            is_generator = "x86_64" in name and name.endswith(".pl")
         if not is_generator and PurePosixPath(name).suffix not in {".c", ".h", ".rs"}:
             continue
         source = member_bytes(archive, member)
@@ -161,11 +179,12 @@ def ring_notices(archive, prefix, sections):
             add_text(sections, name, head[0])
             if is_generator:
                 generators.add(name)
-    if len(generators) != 12:
-        raise ValueError("Review the ring x86-64 assembly generator notices.")
+    expected = len(ARM64_RING_GENERATORS) if target == MACOS_TARGET else 12
+    if len(generators) != expected:
+        raise ValueError(f"Review the ring assembly generator notices for {target}.")
 
 
-def crate_notices(cache, name, version, pin, role, declared, sections):
+def crate_notices(cache, name, version, pin, role, declared, target, sections):
     crate = f"{name}-{version}"
     prefix = crate + "/"
     with tarfile.open(cache_archive(cache, crate, pin), "r:gz") as archive:
@@ -188,7 +207,11 @@ def crate_notices(cache, name, version, pin, role, declared, sections):
              and NOTICE_NAME.match(PurePosixPath(entry.name).name)),
             key=lambda entry: entry.name,
         )
-        if not members and crate != "pg_query-18.1.0":
+        if target == MACOS_TARGET and (name, version) in OBJC2_SOURCES:
+            vcs = json.loads(member_bytes(archive, prefix + ".cargo_vcs_info.json"))
+            if vcs["git"]["sha1"] != OBJC2_COMMIT:
+                raise ValueError(f"Review the upstream license for {crate}.")
+        elif not members and crate != "pg_query-18.1.0":
             raise ValueError(f"Review the missing standalone notices in {crate}.")
         for member in members:
             add_text(sections, member.name.removeprefix(prefix), member_bytes(archive, member))
@@ -196,13 +219,14 @@ def crate_notices(cache, name, version, pin, role, declared, sections):
         if crate == "pg_query-18.1.0":
             parser_notices(archive, prefix, sections)
         if crate == "ring-0.17.14":
-            ring_notices(archive, prefix, sections)
+            ring_notices(archive, prefix, target, sections)
 
 
 def generate(package, pin, output, cargo_home, rust_sysroot):
     manifest, bom, lock_packages = release_input(package, pin)
     registry = registry_inventory(bom, lock_packages)
     commit = manifest["source_commit"]
+    target = manifest["target"]
     sections = [
         (f"Database Migration Guard {manifest['version']} third-party notices\n"
          f"Build target: {manifest['target']}\n"
@@ -216,9 +240,13 @@ def generate(package, pin, output, cargo_home, rust_sysroot):
     ]
     cache = cargo_home / "registry/cache"
     for (name, version), (archive_pin, role, licenses) in sorted(registry.items()):
-        crate_notices(cache, name, version, archive_pin, role, licenses, sections)
+        crate_notices(cache, name, version, archive_pin, role, licenses, target, sections)
 
     sections.append((ROOT / "scripts/native-notices.txt").read_text(encoding="utf-8").encode())
+    if target == MACOS_TARGET:
+        if not OBJC2_SOURCES <= registry.keys():
+            raise ValueError("Review the macOS framework bindings in the SBOM.")
+        sections.append((ROOT / "scripts/native-notices-macos.txt").read_text(encoding="utf-8").encode())
     report = (rust_sysroot / "share/doc/rust/COPYRIGHT-library.html").read_bytes()
     if digest(report).hexdigest() != RUST_REPORT_DIGEST:
         raise ValueError("Review the installed Rust standard-library copyright report.")

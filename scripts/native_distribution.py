@@ -26,6 +26,11 @@ from release_sbom import MAX_SBOM_BYTES
 ROOT = Path(__file__).resolve().parents[1]
 PREVIOUS_SOURCE = "95f825c5d34524e2e68062155fe01cf9acea5603"  # v0.1.0
 METADATA_LIMIT = 64 * 1024
+NATIVE_RUNNERS = {
+    "x86_64-unknown-linux-gnu": ("Linux", ("amd64", "x86_64")),
+    "x86_64-pc-windows-msvc": ("Windows", ("amd64", "x86_64")),
+    "aarch64-apple-darwin": ("Darwin", ("arm64",)),
+}
 
 
 def member_limits(target):
@@ -125,9 +130,9 @@ def install(source, expected, active):
 
 
 def verify_install(inputs, source, version, target, work):
-    expected_platform = "Windows" if executable_name(target).endswith(".exe") else "Linux"
-    if platform.system() != expected_platform or platform.machine().lower() not in ("amd64", "x86_64"):
-        raise ValueError(f"Use a native {expected_platform} x86-64 verification runner.")
+    expected_platform, machines = NATIVE_RUNNERS[target]
+    if platform.system() != expected_platform or platform.machine().lower() not in machines:
+        raise ValueError(f"Use a native {target} verification runner.")
 
     pins_path = inputs / "pins.json"
     if not pins_path.is_file() or pins_path.is_symlink() or not 0 < pins_path.stat().st_size <= METADATA_LIMIT:
@@ -190,6 +195,14 @@ def verify_install(inputs, source, version, target, work):
                     'Write-Output ("Authenticode status " + '
                     '(Get-AuthenticodeSignature -LiteralPath $env:DMG_EXE).Status)',
                     work=work, env=dict(env, DMG_EXE=str(active)))
+            elif expected_platform == "Darwin":
+                arch = run("/usr/bin/lipo", "-archs", active, work=work, env=env, capture=True).strip()
+                if arch != "arm64":
+                    raise ValueError("The installed executable must be an arm64 Mach-O.")
+                run("/usr/bin/otool", "-L", active, work=work, env=env)
+                run("/usr/bin/vtool", "-show-build", active, work=work, env=env)
+                run("/usr/bin/codesign", "--verify", "--strict", active, work=work, env=env)
+                run("/usr/bin/codesign", "-dv", active, work=work, env=env)
             else:
                 run("ldd", active, work=work, env=env)
             python("scripts/smoke-release.py", active)
