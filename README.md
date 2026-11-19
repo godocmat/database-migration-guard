@@ -58,3 +58,5 @@ The example returns exit `0` and writes a `pass` decision to `report.json`. Chec
 - Adapt the GitHub and GitLab CI examples to your repository. Protected merge enforcement requires provider-specific settings and live pilot verification. [GitHub](docs/github-pilot.md) · [GitLab](docs/gitlab-ci.md)
 
 Run `cargo test --locked --workspace` from the Guard checkout. [Contributing and verification](CONTRIBUTING.md)
+
+Use GitHub private vulnerability reporting for security issues. [Security policy](SECURITY.md)
