@@ -223,6 +223,35 @@ fn scan_and_check_return_distinct_status_and_digest() {
 }
 
 #[test]
+fn medium_policy_denies_a_not_null_column_with_a_null_default() {
+    let project = Fixture::new();
+    project.write("policy.toml", "schema_version = 1\ndeny_at = \"medium\"\n");
+    for (clause, exit, decision) in [
+        ("NOT NULL DEFAULT NULL", 1, "denied"),
+        ("NOT NULL DEFAULT NULL::integer", 1, "denied"),
+        ("NOT NULL", 1, "denied"),
+        ("NOT NULL DEFAULT 0", 0, "pass"),
+        ("DEFAULT NULL", 0, "pass"),
+    ] {
+        project.write(
+            "migrations/002_add_column.sql",
+            format!("ALTER TABLE public.items ADD COLUMN quantity integer {clause};\n"),
+        );
+        let output = project.check();
+        assert_exit(&output, exit);
+        let saved = report(&output);
+        assert_eq!(saved["coverage"]["status"], "complete", "{clause}");
+        assert_eq!(saved["decision"]["status"], decision, "{clause}");
+        let findings = saved["findings"].as_array().unwrap();
+        assert_eq!(findings.len(), usize::from(exit == 1), "{clause}");
+        if let [finding] = findings.as_slice() {
+            assert_eq!(finding["rule_id"], "PG004", "{clause}");
+            assert_eq!(finding["severity"], "medium", "{clause}");
+        }
+    }
+}
+
+#[test]
 fn incomplete_evidence_takes_precedence_and_reports_survive_nonzero_exit() {
     let project = Fixture::new();
     project.write(

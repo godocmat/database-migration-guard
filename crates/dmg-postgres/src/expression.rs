@@ -21,6 +21,7 @@ fn classify_default(value: &Node, depth: usize) -> DefaultExpr {
         return DefaultExpr::Unknown;
     }
     match node(value) {
+        Some(Ast::AConst(value)) if value.isnull => DefaultExpr::Null,
         Some(Ast::AConst(_)) => DefaultExpr::Constant,
         Some(Ast::SqlvalueFunction(_)) => DefaultExpr::Stable,
         Some(Ast::TypeCast(cast)) if cast.type_name.as_ref().is_some_and(builtin_cast) => cast

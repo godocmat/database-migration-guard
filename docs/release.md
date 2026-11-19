@@ -1,6 +1,6 @@
 # Release preparation
 
-The project source is available under the MIT License. This guide covers staging and distributing native packages and container images. An official artifact release requires approval and completion of the acceptance matrix. [Project license](../LICENSE) · [Implementation plan](../PLAN.md#15-deployment-and-release-strategy)
+The project source is available under the MIT License. This guide covers staging and distributing native packages and container images. The acceptance matrix tracks the requirements for the broader Core v1 distribution. [Project license](../LICENSE) · [Implementation plan](../PLAN.md#15-deployment-and-release-strategy)
 
 ## Build a native candidate
 
@@ -39,6 +39,8 @@ The native SBOM combines the locked cargo-cyclonedx inventory with packages Carg
 Review imported native libraries on each platform with a native inspection tool such as dumpbin /DEPENDENTS, readelf -d, or otool -L. Record and verify the expected OS runtimes on the clean test host, including the installed Visual C++ runtime where applicable. Review registry package licenses and compile the required redistribution notices for the exact release. Include the pinned parser's upstream licenses and vendored notices and the ring native source notices. For the CLI image, generate a separate filesystem SBOM with a reviewed Syft release or equivalent and retain the application SBOM for the executable. Scan the final locked Cargo graph and the image packages with reviewed advisory sources and record their database revisions. [Parser notices](research/postgresql-parser.md#build-and-redistribution-evidence) · [Ring notices](https://docs.rs/crate/ring/0.17.14/source/LICENSE) · [Syft documentation](https://oss.anchore.com/docs/overview/sbom/)
 
 The native package notice review records the locked crate archives, included upstream texts, and outstanding runtime and image scope. Include the project license text and the approved third-party notices with any official artifact release. [Third-party notice review](research/release-notices-review.md) · [Release acceptance](../PLAN.md#20-definition-of-done)
+
+For the x86-64 Linux and Windows archives, `scripts/package-notices.py` verifies the staged package, matches its SBOM to the pinned Cargo sources, and collects notices from the locked crate archives and the Rust toolchain. The archives include `THIRD-PARTY-NOTICES.txt` with exact source links and `RUST-STDLIB-COPYRIGHT.html`. Review the native notices again after changing the locked dependencies or Rust toolchain.
 
 ## Verify and smoke test an installation
 
@@ -163,7 +165,9 @@ The package pin and the official CycloneDX 1.5 schema validated. The installed-p
 
 ## Acceptance matrix
 
-The proposed source is protected public `main` at `3b0c23de74c6a7d1e03206dbd7b3d60229f14bde`. Core v1 distribution is on hold. The decision packet records job links, artifact digests, the scope of earlier evidence and the remaining owner decisions. [DMG-16 release decision](research/dmg-16-release-decision.md) · [Progress log](../PROGRESS.md)
+v0.1.0 ships Linux and Windows x86-64 archives with a project license, third-party notices, a CycloneDX SBOM, checksums, and GitHub build attestations. The release assets record the exact build source and packages. [v0.1.0 downloads and release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.0)
+
+The broader Core v1 distribution proposal at `3b0c23de74c6a7d1e03206dbd7b3d60229f14bde` remains on hold. The matrix records the evidence and remaining work for that proposal, including macOS packages, container redistribution, and live protected GitHub and GitLab enforcement. [DMG-16 release decision](research/dmg-16-release-decision.md) · [Progress log](../PROGRESS.md)
 
 | Release check | Evidence and remaining work |
 | --- | --- |

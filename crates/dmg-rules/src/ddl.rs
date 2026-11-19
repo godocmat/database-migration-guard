@@ -429,12 +429,12 @@ impl Ddl<'_> {
                 "column type is needed to determine whether a constrained domain forces a rewrite",
             );
         }
-        if column.not_null && column.default == DefaultExpr::Absent {
+        if column.not_null && matches!(column.default, DefaultExpr::Absent | DefaultExpr::Null) {
             self.scan(
                 span,
                 object.clone(),
                 table,
-                "Adding a NOT NULL column without a default can scan existing rows and reject the migration.",
+                "Adding a NOT NULL column without a non-null default can scan existing rows and reject the migration.",
                 "Existing rows would receive NULL for the new column unless another operation establishes a value.",
             );
         }

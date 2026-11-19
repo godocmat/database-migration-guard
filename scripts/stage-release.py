@@ -14,7 +14,10 @@ import tarfile
 import tempfile
 import tomllib
 
-from package_common import MAX_BINARY_BYTES, TARGETS, VERSION, binary_name, sha256
+from package_common import (
+    DISTRIBUTION_DOCUMENTS, MAX_BINARY_BYTES, NATIVE_RELEASE_FORMATS, TARGETS, VERSION,
+    binary_name, executable_name, sha256,
+)
 from release_sbom import GENERATOR_VERSION, MAX_SBOM_BYTES, cargo_artifacts, normalize
 
 COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
@@ -74,8 +77,19 @@ def component(path):
 
 
 def checksums(package, manifest):
-    names = [package / "package.json", package / manifest["binary"]["name"], package / SBOM]
-    return "".join(f"{sha256(path)}  {path.name}\n" for path in sorted(names))
+    names = ["package.json", manifest["binary"]["name"], SBOM]
+    if manifest["schema_version"] == 2:
+        names.extend(name for name, _ in DISTRIBUTION_DOCUMENTS.values())
+    return "".join(f"{sha256(package / name)}  {name}\n" for name in sorted(names))
+
+
+def write_package_metadata(package, manifest):
+    manifest_path = package / "package.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                             encoding="utf-8", newline="\n")
+    (package / "SHA256SUMS").write_text(checksums(package, manifest),
+                                        encoding="ascii", newline="\n")
+    return sha256(manifest_path)
 
 
 def build_environment(checkout, target_dir, target, timestamp):
@@ -180,17 +194,44 @@ def stage(source, output, target, cyclonedx, expected_commit):
             "binary": binary,
             "sbom": component(sbom),
         }
-        manifest_path = package / "package.json"
-        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-                                 encoding="utf-8", newline="\n")
-        manifest_digest = sha256(manifest_path)
-        (package / "SHA256SUMS").write_text(checksums(package, manifest),
-                                            encoding="ascii", newline="\n")
+        manifest_digest = write_package_metadata(package, manifest)
         verify(package, manifest_digest)
         if output.exists() or output.is_symlink():
             raise ValueError("The destination was created while staging.")
         package.rename(output)
     return manifest, manifest_digest
+
+
+def prepare_distribution(package, pin, license_path, notices, output):
+    manifest = verify(package, pin)
+    target = manifest["target"]
+    if manifest["schema_version"] != 1 or target not in NATIVE_RELEASE_FORMATS:
+        raise ValueError("Use a verified Linux or Windows x86-64 native candidate.")
+    if output.exists() or output.is_symlink():
+        raise ValueError("Choose a new distribution directory.")
+    with tempfile.TemporaryDirectory(prefix="dmg-distribution-", dir=output.parent) as scratch:
+        layout = Path(scratch) / "package"
+        layout.mkdir()
+        executable = layout / executable_name(target)
+        shutil.copyfile(package / manifest["binary"]["name"], executable)
+        executable.chmod(0o755)
+        if sha256(executable) != manifest["binary"]["sha256"]:
+            raise ValueError("The copied executable differs from the verified candidate.")
+        shutil.copyfile(package / SBOM, layout / SBOM)
+        if component(layout / SBOM) != manifest["sbom"]:
+            raise ValueError("The copied SBOM differs from the verified candidate.")
+        manifest.update(schema_version=2, binary=component(executable))
+        for key, (name, limit) in DISTRIBUTION_DOCUMENTS.items():
+            source = license_path if key == "license" else notices / name
+            destination = layout / name
+            destination.write_bytes(read_metadata(source, limit))
+            manifest[key] = component(destination)
+        digest = write_package_metadata(layout, manifest)
+        verify(layout, digest)
+        if output.exists() or output.is_symlink():
+            raise ValueError("The distribution destination was created while preparing it.")
+        layout.rename(output)
+    return manifest, digest
 
 
 def read_metadata(path, limit):
@@ -221,14 +262,22 @@ def verify(package, expected_digest):
     version = manifest["version"]
     target = manifest["target"]
     if (
-        manifest["schema_version"] != 1 or manifest["name"] != "dmg"
+        manifest["schema_version"] not in (1, 2) or manifest["name"] != "dmg"
         or target not in TARGETS or not VERSION.fullmatch(version)
         or not COMMIT.fullmatch(manifest["source_commit"])
         or not DIGEST.fullmatch(manifest["cargo_lock_sha256"])
         or not DIGEST.fullmatch(manifest["rust_toolchain_sha256"])
     ):
         raise ValueError("Invalid Guard package manifest.")
-    verify_component(package, manifest["binary"], binary_name(version, target), MAX_BINARY_BYTES)
+    if manifest["schema_version"] == 2:
+        if target not in NATIVE_RELEASE_FORMATS:
+            raise ValueError("The distribution package target is unsupported.")
+        for key, (name, limit) in DISTRIBUTION_DOCUMENTS.items():
+            verify_component(package, manifest[key], name, limit)
+        executable = executable_name(target)
+    else:
+        executable = binary_name(version, target)
+    verify_component(package, manifest["binary"], executable, MAX_BINARY_BYTES)
     verify_component(package, manifest["sbom"], SBOM, MAX_SBOM_BYTES)
     expected = checksums(package, manifest).encode("ascii")
     if read_metadata(package / "SHA256SUMS", MAX_MANIFEST_BYTES) != expected:
@@ -253,6 +302,12 @@ def main():
     build.add_argument("--target", choices=TARGETS, required=True)
     build.add_argument("--cyclonedx", type=Path, required=True, help="reviewed cargo-cyclonedx executable")
     build.add_argument("--output", type=Path, required=True, help="new package directory")
+    distribution = modes.add_parser("distribution", help="prepare an archive layout from a verified native candidate")
+    distribution.add_argument("--package", type=Path, required=True)
+    distribution.add_argument("--manifest-sha256", required=True, type=pinned(DIGEST, "a SHA-256 digest"))
+    distribution.add_argument("--license", type=Path, required=True)
+    distribution.add_argument("--notices", type=Path, required=True)
+    distribution.add_argument("--output", type=Path, required=True, help="new distribution directory")
     check = modes.add_parser("verify", help="compare a package with its trusted manifest pin")
     check.add_argument("--package", type=Path, required=True)
     check.add_argument("--manifest-sha256", required=True, type=pinned(DIGEST, "a SHA-256 digest"))
@@ -261,6 +316,12 @@ def main():
         if args.mode == "stage":
             manifest, pin = stage(args.source, args.output, args.target, args.cyclonedx, args.expected_commit)
             print(f"Staged {manifest['binary']['name']}")
+            print(f"package.json SHA-256 {pin}")
+        elif args.mode == "distribution":
+            manifest, pin = prepare_distribution(
+                args.package, args.manifest_sha256, args.license, args.notices, args.output,
+            )
+            print(f"Prepared {manifest['binary']['name']} for distribution")
             print(f"package.json SHA-256 {pin}")
         else:
             manifest = verify(args.package, args.manifest_sha256)
