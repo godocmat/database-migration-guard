@@ -167,7 +167,7 @@ The package pin and the official CycloneDX 1.5 schema validated. The installed-p
 
 v0.1.1 ships Linux and Windows x86-64 archives and a macOS arm64 archive. Each includes the project license, third-party notices, a CycloneDX SBOM, and package checksums. GitHub build attestations cover every archive and the Linux and Windows download checksum list. [v0.1.1 downloads and release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1)
 
-Dispatch `macos-release.yml` from protected `main` with the release tag and its approved full commit SHA. The workflow builds the tagged source, verifies clean install, upgrade and rollback on Apple silicon with process networking denied, and signs provenance recording both the tag and workflow commits. Verify the archive with `macos-provenance.jsonl` before installing. [macOS installation](../README.md#macos-on-apple-silicon)
+Dispatch `macos-release.yml` from protected `main` with the release tag and its approved full commit SHA. The workflow builds the tagged source, verifies clean install, upgrade and rollback on Apple silicon with process networking denied, and checks the archive's source commit before signing. Verify the archive with `macos-provenance.jsonl` before installing. [macOS installation](../README.md#macos-on-apple-silicon)
 
 The broader Core v1 distribution proposal at `3b0c23de74c6a7d1e03206dbd7b3d60229f14bde` remains on hold. The matrix records the evidence and remaining work for that proposal, including macOS packages, container redistribution, and live protected GitHub and GitLab enforcement. [DMG-16 release decision](research/dmg-16-release-decision.md) · [Progress log](../PROGRESS.md)
 

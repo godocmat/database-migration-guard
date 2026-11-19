@@ -12,7 +12,7 @@ The project is free to use, modify, and redistribute under the [MIT License](LIC
 | --- | --- |
 | Linux x86-64, tested on Ubuntu 24.04 with glibc 2.39 | [Download tar.gz](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/dmg-0.1.1-x86_64-unknown-linux-gnu.tar.gz) |
 | Windows x86-64 | [Download ZIP](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/dmg-0.1.1-x86_64-pc-windows-msvc.zip) |
-| macOS on Apple silicon (arm64), tested on macOS 15 | [Download tar.gz](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/dmg-0.1.1-aarch64-apple-darwin.tar.gz) |
+| macOS on Apple silicon (arm64), tested on macOS 15 | [Download from the release assets](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1#assets) |
 
 The extracted CLI runs offline for local migration checks. Install Git to compare commits. Windows uses the x64 Visual C++ Redistributable. [Release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1) · [Microsoft runtime downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
 
@@ -50,12 +50,12 @@ Expand-Archive -LiteralPath $archive -DestinationPath dmg-install
 
 ### macOS on Apple silicon
 
-From an empty folder, use the authenticated GitHub CLI to download the archive and verify its attestation before extraction. The attestation records the v0.1.1 source commit and the protected workflow commit shown below. The executable uses a linker-generated ad hoc signature. [macOS attestation bundle](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.1/macos-provenance.jsonl)
+From an empty folder, use the authenticated GitHub CLI to download the archive and verify its attestation before extraction. Replace `WORKFLOW_COMMIT` with the full macOS signing workflow commit from the release notes. The archive's authenticated package manifest records the v0.1.1 source commit. The executable uses a linker-generated ad hoc signature. [Release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.1)
 
 ~~~sh
 repo=godocmat/database-migration-guard
 archive=dmg-0.1.1-aarch64-apple-darwin.tar.gz
-workflow_commit=a1f9a94e83105bd4e958fd0fb4fb713cf019abd0
+workflow_commit=WORKFLOW_COMMIT
 gh release download v0.1.1 --repo "$repo" --pattern "$archive" --pattern macos-provenance.jsonl &&
   gh attestation verify "$archive" --bundle macos-provenance.jsonl --repo "$repo" \
     --signer-workflow "$repo/.github/workflows/macos-release.yml" --source-ref refs/heads/main \
