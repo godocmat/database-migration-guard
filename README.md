@@ -55,7 +55,7 @@ From an empty folder, use the authenticated GitHub CLI to download the archive a
 ~~~sh
 repo=godocmat/database-migration-guard
 archive=dmg-0.1.1-aarch64-apple-darwin.tar.gz
-workflow_commit=1d3c1b7a9ba074650700d090e2b6c1dadc87f8cf
+workflow_commit=a1f9a94e83105bd4e958fd0fb4fb713cf019abd0
 gh release download v0.1.1 --repo "$repo" --pattern "$archive" --pattern macos-provenance.jsonl &&
   gh attestation verify "$archive" --bundle macos-provenance.jsonl --repo "$repo" \
     --signer-workflow "$repo/.github/workflows/macos-release.yml" --source-ref refs/heads/main \
