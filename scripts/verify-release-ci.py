@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,7 +16,8 @@ import zipfile
 from jsonschema import Draft7Validator, ValidationError
 from referencing import Registry, Resource
 
-from package_common import TARGETS, sha256
+from native_distribution import PREVIOUS_SOURCE, create_archive
+from package_common import NATIVE_RELEASE_FORMATS, TARGETS, VERSION, executable_name, release_archive_name, sha256
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,8 +40,9 @@ SCHEMA_DIGESTS = {
 def fetch(url, limit=4 * 1024 * 1024):
     return subprocess.run(
         ["curl", "--disable", "--fail", "--silent", "--show-error", "--location",
-         "--proto", "=https", "--max-time", "45", "--max-filesize", str(limit), "--", url],
-        cwd=ROOT, check=True, timeout=50, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+         "--proto", "=https", "--max-time", "30", "--retry", "2", "--retry-max-time", "45",
+         "--max-filesize", str(limit), "--", url],
+        cwd=ROOT, check=True, timeout=80, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
     ).stdout
 
 
@@ -49,8 +52,8 @@ def fetch_pinned(url, path, expected):
         raise ValueError(f"Upstream SHA-256 differs for {path.name}")
 
 
-def run(*args, timeout=120):
-    subprocess.run(args, cwd=ROOT, check=True, timeout=timeout, stdin=subprocess.DEVNULL)
+def run(*args, cwd=ROOT, env=None, timeout=120):
+    subprocess.run(args, cwd=cwd, env=env, check=True, timeout=timeout, stdin=subprocess.DEVNULL)
 
 
 def python(script, *args, timeout=120):
@@ -121,9 +124,70 @@ def check_reproducible(first, second):
         raise ValueError("Independent source extractions produced different package files")
 
 
-def verify(target, commit, output, work):
-    if output.exists():
+def build_rollback(target, work, destination):
+    checkout = work / "rollback-source"
+    target_dir = work / "rollback-target"
+    package = work / "rollback-package"
+    run("git", "worktree", "add", "--quiet", "--detach", checkout, PREVIOUS_SOURCE)
+    try:
+        env = dict(os.environ, CARGO_TARGET_DIR=str(target_dir), DOCS_RS="1")
+        run("cargo", "fetch", "--locked", "--target", target, cwd=checkout, env=env, timeout=180)
+        run("cargo", "build", "--locked", "--offline", "--release", "--target", target, "-p", "dmg-cli",
+            cwd=checkout, env=env, timeout=900)
+        python("scripts/stage-pilot.py", "--source", checkout, "--target", target,
+               "--binary", target_dir / target / "release" / executable_name(target), "--output", package)
+    finally:
+        run("git", "worktree", "remove", checkout)
+    previous = json.loads((package / "package.json").read_bytes())
+    if (previous["source_commit"], previous["target"]) != (PREVIOUS_SOURCE, target):
+        raise ValueError("The rollback binary was not built from the pinned pilot source.")
+    shutil.copyfile(package / previous["binary"]["name"], destination)
+    if sha256(destination) != previous["binary"]["sha256"]:
+        raise ValueError("The staged rollback executable differs from its pilot manifest.")
+    return previous["binary"]["sha256"]
+
+
+def build_distribution(target, commit, version, candidate, pin, output, work):
+    notices, layout = work / "notices", work / "distribution-package"
+    notices.mkdir()
+    python("scripts/package-notices.py", "--package", candidate, "--manifest-sha256", pin,
+           "--output", notices, timeout=300)
+    license_path = work / "LICENSE"
+    license_path.write_bytes(subprocess.run(
+        ["git", "--no-replace-objects", "cat-file", "blob", f"{commit}:LICENSE"],
+        cwd=ROOT, check=True, timeout=30, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+    ).stdout)
+    python("scripts/stage-release.py", "distribution", "--package", candidate,
+           "--manifest-sha256", pin, "--license", license_path, "--notices", notices, "--output", layout)
+    create_archive(layout, output, version, target)
+    rollback = output.parent / f"rollback-{executable_name(target)}"
+    previous = build_rollback(target, work, rollback)
+    pins = {
+        "source_commit": commit,
+        "version": version,
+        "target": target,
+        "archive_sha256": sha256(output),
+        "manifest_sha256": sha256(layout / "package.json"),
+        "previous_source": PREVIOUS_SOURCE,
+        "previous_sha256": previous,
+    }
+    (output.parent / "pins.json").write_text(
+        json.dumps(pins, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n",
+    )
+
+
+def verify(target, commit, output, work, distribution=None):
+    if output.exists() or output.is_symlink():
         raise ValueError("Choose a new artifact path")
+    if distribution and (
+        not VERSION.fullmatch(distribution) or target not in NATIVE_RELEASE_FORMATS
+        or output.name != release_archive_name(distribution, target)
+        or any(
+            path.exists() or path.is_symlink()
+            for path in (output.parent / "pins.json", output.parent / f"rollback-{executable_name(target)}")
+        )
+    ):
+        raise ValueError("Choose a new Linux or Windows release path with the expected version and filename.")
     run("git", "--version")
     run("rustc", "-Vv")
     run(sys.executable, "--version")
@@ -136,6 +200,8 @@ def verify(target, commit, output, work):
     validate_sbom(first / "dmg.cdx.json", work)
 
     manifest = json.loads((first / "package.json").read_bytes())
+    if distribution and manifest["version"] != distribution:
+        raise ValueError("The candidate version differs from the requested release version.")
     installed = work / "installed"
     installed.mkdir()
     binary = installed / f"dmg{TARGETS[target]}"
@@ -146,9 +212,12 @@ def verify(target, commit, output, work):
     for provider in ("github", "gitlab"):
         python(f"integrations/{provider}/tests/replay.py", "--binary", binary, timeout=300)
 
-    with tarfile.open(output, "x:gz") as archive:
-        for member in sorted(first.iterdir()):
-            archive.add(member, arcname=member.name)
+    if distribution:
+        build_distribution(target, commit, distribution, first, pin, output, work)
+    else:
+        with tarfile.open(output, "x:gz") as archive:
+            for member in sorted(first.iterdir()):
+                archive.add(member, arcname=member.name)
     print(f"Repeated package manifest SHA-256 {pin}")
     print(f"Artifact archive SHA-256 {sha256(output)}")
 
@@ -158,10 +227,11 @@ def main():
     parser.add_argument("target", choices=TARGETS)
     parser.add_argument("commit")
     parser.add_argument("output", type=Path)
+    parser.add_argument("--distribution", metavar="VERSION", help="include official distribution and rollback inputs")
     args = parser.parse_args()
     try:
         with tempfile.TemporaryDirectory(prefix="dmg-native-ci-", dir=args.output.parent) as directory:
-            verify(args.target, args.commit, args.output, Path(directory).resolve())
+            verify(args.target, args.commit, args.output, Path(directory).resolve(), args.distribution)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError, tarfile.TarError, zipfile.BadZipFile, ValidationError) as error:
         parser.exit(1, f"Native package verification failed. {error}\n")
 
