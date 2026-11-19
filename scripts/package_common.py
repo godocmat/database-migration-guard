@@ -10,6 +10,15 @@ TARGETS = {
     "aarch64-apple-darwin": "",
 }
 MAX_BINARY_BYTES = 64 * 1024 * 1024
+NATIVE_RELEASE_FORMATS = {
+    "x86_64-unknown-linux-gnu": ".tar.gz",
+    "x86_64-pc-windows-msvc": ".zip",
+}
+DISTRIBUTION_DOCUMENTS = {
+    "license": ("LICENSE", 64 * 1024),
+    "notices": ("THIRD-PARTY-NOTICES.txt", 16 * 1024 * 1024),
+    "rust_stdlib_copyright": ("RUST-STDLIB-COPYRIGHT.html", 4 * 1024 * 1024),
+}
 
 
 def sha256(path):
@@ -19,3 +28,11 @@ def sha256(path):
 
 def binary_name(version, target):
     return f"dmg-{version}-{target}{TARGETS[target]}"
+
+
+def executable_name(target):
+    return f"dmg{TARGETS[target]}"
+
+
+def release_archive_name(version, target):
+    return f"dmg-{version}-{target}{NATIVE_RELEASE_FORMATS[target]}"

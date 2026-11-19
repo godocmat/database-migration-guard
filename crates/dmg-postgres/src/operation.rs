@@ -100,6 +100,7 @@ pub struct DataType {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum DefaultExpr {
     Absent,
+    Null,
     Constant,
     Stable,
     Volatile,

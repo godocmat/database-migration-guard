@@ -6,6 +6,49 @@ Guard supports PostgreSQL 15–18 and documented plain SQL, SQLx, Flyway, Goose,
 
 The project is free to use, modify, and redistribute under the [MIT License](LICENSE).
 
+## Download v0.1.0
+
+| Platform | Archive |
+| --- | --- |
+| Linux x86-64, tested on Ubuntu 24.04 with glibc 2.39 | [Download tar.gz](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.0/dmg-0.1.0-x86_64-unknown-linux-gnu.tar.gz) |
+| Windows x86-64 | [Download ZIP](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.0/dmg-0.1.0-x86_64-pc-windows-msvc.zip) |
+
+Save the archive and the release's checksum list in the same empty folder. The extracted CLI runs offline for local migration checks. Install Git to compare commits. Windows uses the x64 Visual C++ Redistributable. [Release notes](https://github.com/godocmat/database-migration-guard/releases/tag/v0.1.0) · [SHA256SUMS](https://github.com/godocmat/database-migration-guard/releases/download/v0.1.0/SHA256SUMS) · [Microsoft runtime downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
+
+### Linux
+
+~~~sh
+archive=dmg-0.1.0-x86_64-unknown-linux-gnu.tar.gz
+awk -v name="$archive" 'NF == 2 && $2 == name { print }' SHA256SUMS |
+  sha256sum --check --strict &&
+  mkdir dmg-install &&
+  tar -xzf "$archive" -C dmg-install &&
+  ./dmg-install/dmg --version
+~~~
+
+### Windows PowerShell
+
+~~~powershell
+$archive = 'dmg-0.1.0-x86_64-pc-windows-msvc.zip'
+$pattern = '^([a-f0-9]{64})  ' + [regex]::Escape($archive) + '$'
+$checksumEntries = @(Select-String -LiteralPath SHA256SUMS -Pattern $pattern)
+if ($checksumEntries.Count -ne 1) { throw 'Expected one archive checksum' }
+$expected = $checksumEntries[0].Matches[0].Groups[1].Value
+if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $expected) { throw 'Archive checksum mismatch' }
+Expand-Archive -LiteralPath $archive -DestinationPath dmg-install
+& .\dmg-install\dmg.exe --version
+~~~
+
+The archives include the MIT license, third-party notices, SBOM, and build manifest. To verify build provenance with the GitHub CLI, replace `ARCHIVE` with the downloaded archive filename or `SHA256SUMS` and `COMMIT` with the full source commit listed in the release notes. [GitHub attestation verification](https://cli.github.com/manual/gh_attestation_verify)
+
+~~~sh
+gh attestation verify ARCHIVE \
+  --repo godocmat/database-migration-guard \
+  --signer-workflow godocmat/database-migration-guard/.github/workflows/native-release.yml \
+  --source-ref refs/heads/main --source-digest COMMIT --signer-digest COMMIT \
+  --deny-self-hosted-runners
+~~~
+
 ## Build from source
 
 Install Git, rustup, and the native compiler and libclang for your platform. Rustup selects the pinned Rust toolchain, and Cargo downloads the locked dependencies on the first build. [Linux, Windows, and macOS build prerequisites](CONTRIBUTING.md#native-postgresql-parser)
@@ -16,16 +59,16 @@ cd database-migration-guard
 cargo build --locked --release -p dmg-cli
 ~~~
 
-The executable is `target/release/dmg` on Linux and macOS or `target/release/dmg.exe` on Windows. Prebuilt binaries and container images are pending release approval. [Release status](docs/release.md#acceptance-matrix)
+The executable is `target/release/dmg` on Linux and macOS or `target/release/dmg.exe` on Windows. Build from source to use Guard on macOS. [Release status](docs/release.md#acceptance-matrix)
 
 ## Try an offline check
 
-Run the example from the Guard checkout after building. It creates a temporary directory, writes a sample migration, and checks it against the default policy. Use your own PostgreSQL major and configure the migration roots and runner profile when adopting Guard in a project.
+Run the example from the folder containing `dmg-install`. For a source build, run from the Guard checkout and replace `dmg-install` in the executable path with `target/release`. The example writes and checks a sample migration in a temporary directory. For your own repository, select its PostgreSQL major, migration roots, and runner profile.
 
-On Linux or macOS:
+### Linux or macOS
 
 ~~~sh
-dmg="$(pwd)/target/release/dmg"
+dmg="$(pwd)/dmg-install/dmg"
 cd "$(mktemp -d)"
 "$dmg" init --target 18
 mkdir migrations
@@ -34,10 +77,10 @@ printf '%s\n' 'schema_version = 1' > policy.toml
 "$dmg" check --policy policy.toml --format json --output report.json
 ~~~
 
-In Windows PowerShell:
+### Windows PowerShell
 
 ~~~powershell
-$dmg = (Resolve-Path 'target/release/dmg.exe').Path
+$dmg = (Resolve-Path 'dmg-install/dmg.exe').Path
 $demo = Join-Path ([IO.Path]::GetTempPath()) "dmg-demo-$([guid]::NewGuid())"
 New-Item -ItemType Directory -Path $demo | Out-Null
 Set-Location -LiteralPath $demo
